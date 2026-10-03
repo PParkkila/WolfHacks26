@@ -220,3 +220,7 @@ __marimo__/
 .streamlit/secrets.toml
 node_modules/
 dist/
+
+# Local data and Python environment for the Databricks/Tiger prototype
+databricks/local-data/
+databricks/.venv/

@@ -1,4 +1,11 @@
 # Databricks notebook source
+# /// script
+# [tool.databricks.environment]
+# environment_version = "6"
+# dependencies = [
+#   "remotezip==0.12.6",
+# ]
+# ///
 """Range-download one nested IMU50 subject ZIP and expand it into a Volume."""
 
 # COMMAND ----------
@@ -25,7 +32,7 @@ from remotezip import RemoteZip
 dbutils.widgets.text("subject_id", "00")
 dbutils.widgets.text(
     "volume_root",
-    "/Volumes/main/wolfhacks_raw/source_files/imu50",
+    "/Volumes/workspace/wolfhacks_raw/source_files/imu50",
 )
 
 subject_id = dbutils.widgets.get("subject_id").strip()

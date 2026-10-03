@@ -1,4 +1,8 @@
 # Databricks notebook source
+# /// script
+# [tool.databricks.environment]
+# environment_version = "6"
+# ///
 """Download one BIG IDEAs subject directly into a Unity Catalog Volume."""
 
 # COMMAND ----------
@@ -13,7 +17,7 @@ from urllib.request import Request, urlopen
 dbutils.widgets.text("subject_id", "001")
 dbutils.widgets.text(
     "volume_root",
-    "/Volumes/main/wolfhacks_raw/source_files/big_ideas",
+    "/Volumes/workspace/wolfhacks_raw/source_files/big_ideas",
 )
 dbutils.widgets.dropdown("include_large_files", "false", ["false", "true"])
 
@@ -125,7 +129,11 @@ for filename in files:
         volume_root / subject_id / filename,
     )
 
+<<<<<<< Updated upstream
 if not include_large_files:
     print("Skipped ACC and BVP for this pilot. Set include_large_files=true to add them.")
 
 print(f"BIG IDEAs subject {subject_id} is staged in {volume_root / subject_id}")
+=======
+print(f"BIG IDEAs subject {subject_id} is staged in {volume_root / subject_id}")
+>>>>>>> Stashed changes

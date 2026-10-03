@@ -29,6 +29,10 @@ src/
 public/                       # Static assets
 ```
 
+The initial scaffold now includes these directories and placeholder headers.
+The shared TypeScript contracts in `src/types/sensor.ts` define synchronized
+sensor samples, rolling features, model risk points, and replay sessions.
+
 ## User experience
 
 1. The user opens the PulseCast dashboard.

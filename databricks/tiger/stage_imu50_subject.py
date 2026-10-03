@@ -14,6 +14,7 @@ dbutils.library.restartPython()
 import os
 import re
 import shutil
+import tempfile
 import time
 from pathlib import Path
 from zipfile import ZipFile
@@ -34,7 +35,9 @@ if not re.fullmatch(r"(?:[0-4][0-9])", subject_id):
     raise ValueError("subject_id must be 00 through 49")
 
 url = "https://zenodo.org/records/21468410/files/IMU50.zip?download=1"
-stage_root = Path("/local_disk0/wolfhacks/imu50") / subject_id
+# Use the compute session's ephemeral directory. This works on serverless and
+# classic compute without assuming /local_disk0 exists.
+stage_root = Path(tempfile.mkdtemp(prefix=f"wolfhacks-imu50-{subject_id}-"))
 member = f"IMU50/DATA/{subject_id}.zip"
 metadata_member = "IMU50/DATA/subjects_info.csv"
 inner_zip = stage_root / member

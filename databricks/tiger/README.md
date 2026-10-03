@@ -27,6 +27,12 @@ time-series database for live events. Both sources meet in Databricks Bronze.
 - `stage_imu50_subject.py`: retrieves one nested IMU50 subject ZIP and expands
   only that subject into the Volume.
 - `tiger_to_bronze.py`: incremental Tiger-to-Delta Databricks job.
+- `inspect_pilot.py`: bounded header and sample inspection after the first two
+  subjects land; it does not scan the whole dataset.
+- `download_first_subjects.py`: local Windows/macOS/Linux download of BIG IDEAs
+  subject `001` and IMU50 subject `00`, ready for a manual Volume upload.
+- `extract_uploaded_imu50.py`: expands an uploaded nested IMU50 subject ZIP on
+  serverless, so the home upload sends about 0.8 GB instead of 4 GB of CSVs.
 
 ## 1. Create the Tiger service
 
@@ -137,6 +143,43 @@ notebook defaults with a catalog where you have `USE CATALOG`, `CREATE SCHEMA`,
 Run these as Databricks notebooks or one-time jobs. Do one subject first and
 inspect the result before running all subjects.
 
+If downloading on your own computer is faster, run this instead from the
+monorepo root (on Windows, use `py` in place of `python3`):
+
+```sh
+python3 -m pip install remotezip==0.12.6
+python3 databricks/tiger/download_first_subjects.py --output-dir pilot-data
+```
+
+This downloads all eight BIG IDEAs `001` CSVs and the four IMU50 `00` CSVs.
+For BIG IDEAs, it uses PhysioNet's public AWS S3 mirror for files whose
+published SHA-256 checksums match version 1.1.3. Only four corrected food logs
+(`007`, `013`, `015`, and `016`) come from the current PhysioNet HTTP source.
+The public S3 mirror currently exposes version 1.1.2; the version 1.1.3 public
+S3 object path returns 404. Use `--dataset big --all-big` to download all 16
+subjects with the current corrected content. The script needs no AWS CLI or
+AWS credentials for this public mirror.
+
+It reads only the nested IMU50 subject ZIP from Zenodo. Add `--quick` to skip
+BIG IDEAs ACC and BVP for a smaller initial pilot; rerun without it later to
+fill those in. Existing completed files are skipped, and interrupted BIG IDEAs
+downloads resume when the source accepts HTTP ranges.
+
+In Databricks Catalog Explorer, upload `pilot-data/big_ideas/Demographics.csv`
+to the Volume's `big_ideas/` directory, the files in `pilot-data/big_ideas/001/`
+to `big_ideas/001/`, and `pilot-data/imu50/subjects_info.csv` to `imu50/`.
+For IMU50, upload only `pilot-data/imu50/archives/00.zip` to the Volume's
+`imu50/archives/00.zip` path, then run `extract_uploaded_imu50.py` on serverless
+with the correct `volume_root`. This avoids uploading the roughly 4 GB of
+expanded `pilot-data/imu50/00/` CSVs. Keep the directories exactly as shown so
+the pilot inspection notebook finds the files.
+
+To download only the compressed IMU50 subject for that route, run:
+
+```sh
+python3 databricks/tiger/download_first_subjects.py --dataset imu --imu-zip-only --output-dir pilot-data
+```
+
 ### BIG IDEAs
 
 Run `stage_big_ideas_subject.py` with:
@@ -144,10 +187,15 @@ Run `stage_big_ideas_subject.py` with:
 ```text
 subject_id = 001
 volume_root = /Volumes/main/wolfhacks_raw/source_files/big_ideas
+include_large_files = false
 ```
 
 Then repeat for `002` through `016`. The notebook downloads each public CSV
-directly from PhysioNet and also stages `Demographics.csv`.
+directly from PhysioNet and also stages `Demographics.csv`. The pilot setting
+downloads Dexcom, food log, HR, IBI, temperature, and EDA first. Set
+`include_large_files=true` in a background job to add the much larger ACC and
+BVP files. Interrupted `.part` downloads resume when PhysioNet supports HTTP
+Range requests.
 
 ### IMU50
 
@@ -164,8 +212,9 @@ stages `subjects_info.csv`, and deletes the temporary ZIP. It never downloads
 the complete 46.7 GB outer archive.
 
 For subject `00`, expect roughly 834 MB of temporary ZIP data and about 4 GB of
-expanded CSV data. Ensure the Databricks driver has at least 2 GB of free local
-disk for the nested ZIP. The expanded CSV is written directly to the Volume.
+expanded CSV data. The notebook uses the compute session's temporary directory,
+so it works on serverless and classic compute without assuming `/local_disk0`
+exists. The expanded CSV is written directly to the Volume.
 
 Both staging notebooks display byte progress, current MB/s, and ETA. Typical
 healthy-workspace estimates are 5-20 minutes for one BIG IDEAs subject and
@@ -181,6 +230,13 @@ Verify the landing paths:
 display(dbutils.fs.ls("/Volumes/main/wolfhacks_raw/source_files/big_ideas/001"))
 display(dbutils.fs.ls("/Volumes/main/wolfhacks_raw/source_files/imu50/00"))
 ```
+
+Then run `inspect_pilot.py` on serverless with `volume_root` set to
+`/Volumes/<your-catalog>/wolfhacks_raw/source_files`. It prints file sizes,
+actual CSV headers, first and last sampled rows, and blank-cell percentages
+from at most 1,000 rows per file. The ACC and BVP files may show as missing if
+you ran the BIG IDEAs pilot with `include_large_files=false`. This is a quick
+format check; it does not claim exact full-file counts or missingness.
 
 Do not interpret IMU50 units, timezone, or coded subject metadata until its
 source documentation supports that interpretation. Its 128 Hz IMU and 25 Hz
@@ -205,12 +261,9 @@ configuring private networking.
 
 ## 8. Configure the Tiger-to-Bronze job
 
-Attach the PostgreSQL JDBC driver to the Databricks job compute. If it is not
-already present in the runtime, add the Maven library:
-
-```text
-org.postgresql:postgresql:42.7.7
-```
+`tiger_to_bronze.py` is compatible with serverless compute. Its first cell
+installs the Python PostgreSQL client, so no cluster or Maven JDBC library is
+required. Run that first cell and allow the Python restart before continuing.
 
 Create a Databricks job for `tiger_to_bronze.py` with these parameters:
 
@@ -221,7 +274,7 @@ tiger_database      = database name from the connection string
 secret_scope        = wolfhacks
 user_secret_key     = tiger-user
 password_secret_key = tiger-password
-target_table        = main.wolfhacks_bronze.sensor_events
+target_table        = <your-catalog>.wolfhacks_bronze.sensor_events
 lookback_minutes    = 10
 ```
 

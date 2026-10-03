@@ -224,3 +224,4 @@ dist/
 # Local data and Python environment for the Databricks/Tiger prototype
 databricks/local-data/
 databricks/.venv/
+pilot-data/

@@ -15,29 +15,37 @@ dbutils.widgets.text(
     "volume_root",
     "/Volumes/main/wolfhacks_raw/source_files/big_ideas",
 )
+dbutils.widgets.dropdown("include_large_files", "false", ["false", "true"])
 
 subject_id = dbutils.widgets.get("subject_id").strip()
 volume_root = Path(dbutils.widgets.get("volume_root").strip())
+include_large_files = dbutils.widgets.get("include_large_files") == "true"
 
 if not re.fullmatch(r"0(?:0[1-9]|1[0-6])", subject_id):
     raise ValueError("subject_id must be 001 through 016")
 
-files = [
-    f"ACC_{subject_id}.csv",
-    f"BVP_{subject_id}.csv",
+small_files = [
     f"Dexcom_{subject_id}.csv",
-    f"EDA_{subject_id}.csv",
     f"Food_Log_{subject_id}.csv",
     f"HR_{subject_id}.csv",
     f"IBI_{subject_id}.csv",
     f"TEMP_{subject_id}.csv",
+    f"EDA_{subject_id}.csv",
 ]
+large_files = [f"ACC_{subject_id}.csv", f"BVP_{subject_id}.csv"]
+files = small_files + (large_files if include_large_files else [])
 
 base_url = "https://physionet.org/files/big-ideas-glycemic-wearable/1.1.3"
 
 
-def copy_with_progress(source, output, total_bytes: int, label: str) -> None:
-    transferred = 0
+def copy_with_progress(
+    source,
+    output,
+    total_bytes: int,
+    label: str,
+    initial_bytes: int = 0,
+) -> None:
+    transferred = initial_bytes
     started = time.monotonic()
     last_update = started
     bar_width = 30
@@ -71,18 +79,37 @@ def download(url: str, destination: Path) -> None:
     # Unity Catalog owns the catalog/schema/volume directories. Use the
     # Databricks filesystem API to create only folders inside the Volume.
     dbutils.fs.mkdirs(str(destination.parent))
-    request = Request(url, headers={"User-Agent": "WolfHacks26-databricks-ingest/1.0"})
+    temporary = destination.with_suffix(destination.suffix + ".part")
+    resume_from = temporary.stat().st_size if temporary.exists() else 0
+    headers = {"User-Agent": "WolfHacks26-databricks-ingest/1.0"}
+    if resume_from:
+        headers["Range"] = f"bytes={resume_from}-"
+    request = Request(url, headers=headers)
     with urlopen(request, timeout=600) as response:
-        expected_size = response.headers.get("Content-Length")
-        total_bytes = int(expected_size) if expected_size else 0
-        if destination.exists() and expected_size:
+        content_range = response.headers.get("Content-Range")
+        partial_response = response.status == 206 and content_range is not None
+        if partial_response:
+            total_bytes = int(content_range.rsplit("/", 1)[1])
+            write_mode = "ab"
+        else:
+            total_bytes = int(response.headers.get("Content-Length") or 0)
+            resume_from = 0
+            write_mode = "wb"
+        if destination.exists() and total_bytes:
             if destination.stat().st_size == total_bytes:
                 print(f"skip existing: {destination}")
                 return
-        temporary = destination.with_suffix(destination.suffix + ".part")
-        with temporary.open("wb") as output:
-            copy_with_progress(response, output, total_bytes, destination.name)
-        if expected_size and temporary.stat().st_size != total_bytes:
+        if partial_response:
+            print(f"resuming {destination.name} at {resume_from / 1_000_000:,.0f} MB")
+        with temporary.open(write_mode) as output:
+            copy_with_progress(
+                response,
+                output,
+                total_bytes,
+                destination.name,
+                initial_bytes=resume_from,
+            )
+        if total_bytes and temporary.stat().st_size != total_bytes:
             raise IOError(f"incomplete download: {destination}")
         os.replace(temporary, destination)
         print(f"downloaded: {destination}")
@@ -97,5 +124,8 @@ for filename in files:
         f"{base_url}/{subject_id}/{filename}",
         volume_root / subject_id / filename,
     )
+
+if not include_large_files:
+    print("Skipped ACC and BVP for this pilot. Set include_large_files=true to add them.")
 
 print(f"BIG IDEAs subject {subject_id} is staged in {volume_root / subject_id}")

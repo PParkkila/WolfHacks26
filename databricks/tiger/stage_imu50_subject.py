@@ -14,6 +14,7 @@ dbutils.library.restartPython()
 import os
 import re
 import shutil
+import time
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -42,15 +43,48 @@ metadata_source = stage_root / metadata_member
 stage_root.mkdir(parents=True, exist_ok=True)
 
 
+def copy_with_progress(source, output, total_bytes: int, label: str) -> None:
+    transferred = 0
+    started = time.monotonic()
+    last_update = started
+    bar_width = 30
+    while True:
+        chunk = source.read(16 * 1024 * 1024)
+        if not chunk:
+            break
+        output.write(chunk)
+        transferred += len(chunk)
+        now = time.monotonic()
+        if now - last_update < 2 and transferred < total_bytes:
+            continue
+        elapsed = max(now - started, 0.001)
+        rate = transferred / elapsed
+        ratio = min(transferred / total_bytes, 1) if total_bytes else 0
+        filled = int(ratio * bar_width)
+        bar = "#" * filled + "-" * (bar_width - filled)
+        eta = (total_bytes - transferred) / rate if total_bytes and rate else 0
+        print(
+            f"\r{label} [{bar}] {ratio:6.1%} "
+            f"{transferred / 1_000_000:,.0f}/{total_bytes / 1_000_000:,.0f} MB "
+            f"{rate / 1_000_000:,.1f} MB/s ETA {eta / 60:,.1f} min",
+            end="",
+            flush=True,
+        )
+        last_update = now
+    print()
+
+
 def copy_member_to_volume(archive: ZipFile, member_name: str, destination: Path) -> None:
     info = archive.getinfo(member_name)
-    destination.parent.mkdir(parents=True, exist_ok=True)
+    # Unity Catalog owns the catalog/schema/volume directories. Use the
+    # Databricks filesystem API to create only folders inside the Volume.
+    dbutils.fs.mkdirs(str(destination.parent))
     if destination.exists() and destination.stat().st_size == info.file_size:
         print(f"skip existing: {destination}")
         return
     temporary = destination.with_suffix(destination.suffix + ".part")
     with archive.open(info) as source, temporary.open("wb") as output:
-        shutil.copyfileobj(source, output, length=16 * 1024 * 1024)
+        copy_with_progress(source, output, info.file_size, f"expand {destination.name}")
     if temporary.stat().st_size != info.file_size:
         raise IOError(f"incomplete expansion: {destination}")
     os.replace(temporary, destination)
@@ -58,13 +92,18 @@ def copy_member_to_volume(archive: ZipFile, member_name: str, destination: Path)
 
 
 def copy_file_to_volume(source: Path, destination: Path) -> None:
-    destination.parent.mkdir(parents=True, exist_ok=True)
+    dbutils.fs.mkdirs(str(destination.parent))
     if destination.exists() and destination.stat().st_size == source.stat().st_size:
         print(f"skip existing: {destination}")
         return
     temporary = destination.with_suffix(destination.suffix + ".part")
     with source.open("rb") as input_file, temporary.open("wb") as output:
-        shutil.copyfileobj(input_file, output, length=1024 * 1024)
+        copy_with_progress(
+            input_file,
+            output,
+            source.stat().st_size,
+            f"copy {destination.name}",
+        )
     os.replace(temporary, destination)
     print(f"copied: {destination}")
 
@@ -75,8 +114,23 @@ try:
     # Zenodo supports HTTP byte ranges, so this retrieves only the requested
     # approximately 0.7-1.0 GB nested subject ZIP, not the 46.7 GB outer ZIP.
     with RemoteZip(url, support_suffix_range=False) as remote_archive:
-        remote_archive.extract(metadata_member, path=stage_root)
-        remote_archive.extract(member, path=stage_root)
+        for remote_member, destination in (
+            (metadata_member, metadata_source),
+            (member, inner_zip),
+        ):
+            info = remote_archive.getinfo(remote_member)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            temporary = destination.with_suffix(destination.suffix + ".part")
+            with remote_archive.open(info) as source, temporary.open("wb") as output:
+                copy_with_progress(
+                    source,
+                    output,
+                    info.file_size,
+                    f"download {destination.name}",
+                )
+            if temporary.stat().st_size != info.file_size:
+                raise IOError(f"incomplete download: {remote_member}")
+            os.replace(temporary, destination)
 
     copy_file_to_volume(metadata_source, volume_root / "subjects_info.csv")
 

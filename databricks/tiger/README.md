@@ -167,6 +167,14 @@ For subject `00`, expect roughly 834 MB of temporary ZIP data and about 4 GB of
 expanded CSV data. Ensure the Databricks driver has at least 2 GB of free local
 disk for the nested ZIP. The expanded CSV is written directly to the Volume.
 
+Both staging notebooks display byte progress, current MB/s, and ETA. Typical
+healthy-workspace estimates are 5-20 minutes for one BIG IDEAs subject and
+5-20 minutes for one IMU50 subject. The public source, workspace region, and
+Volume write throughput can make runs slower. Expect the complete BIG IDEAs
+landing to take roughly 1-4 hours and all 50 IMU50 subjects to take roughly
+4-12+ hours; run them as jobs rather than keeping an interactive browser tab
+open.
+
 Verify the landing paths:
 
 ```python

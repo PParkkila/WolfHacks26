@@ -154,5 +154,5 @@ To add a tool, put it in `tools/clinician.py` or `tools/patient.py`. Tools call 
   Gemini rejects the next request.
 - **Database access.** Connections are read-only with a statement timeout. Still
   use a SELECT-only role: startup logs a warning if the role could write.
-- **CORS** allows `ALLOWED_ORIGINS` only (a JSON list; the default is the Vite dev
-  server and the GitHub Pages site).
+- **CORS** allows `ALLOWED_ORIGINS` only (a JSON list; the default is the Vite and
+  Next.js dev servers and the GitHub Pages site).

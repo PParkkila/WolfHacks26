@@ -57,10 +57,13 @@ class Settings(BaseSettings):
     replay_seconds_per_hour: float = 5.0
 
     # Browser origins allowed to call the API (a JSON list in the environment, or
-    # ["*"] to open it up): the Vite dev server and the GitHub Pages deployment.
+    # ["*"] to open it up): the Vite and Next.js dev servers and the GitHub Pages
+    # deployment.
     allowed_origins: list[str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
         "https://pparkkila.github.io",
     ]
 

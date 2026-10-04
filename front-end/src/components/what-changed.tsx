@@ -9,6 +9,7 @@ import {
 import { useState } from "react"
 
 import type { Audience } from "@/components/estimate-note"
+import { usualStatus } from "@/components/vitals"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -38,7 +39,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import type { Schemas } from "@/lib/api/client"
+import { friendlyError, type Schemas } from "@/lib/api/client"
 import { useExplain } from "@/lib/api/queries"
 import {
   formatWithUnit,
@@ -46,7 +47,7 @@ import {
   GLUCO_SCORE,
   useMetrics,
 } from "@/lib/catalog"
-import { formatReplayTime } from "@/lib/format"
+import { formatReplayTime, ordinal } from "@/lib/format"
 
 type MetricChange = Schemas["MetricChange"]
 type ChangeReport = Schemas["ChangeReport"]
@@ -67,12 +68,16 @@ const WINDOWS: Record<Audience, { hours: number; label: string }[]> = {
 function UsualBadge({ z }: { z: number | null | undefined }) {
   if (z == null) return <span className="text-muted-foreground">—</span>
   const size = Math.abs(z)
-  const label = size >= 2 ? "Unusual" : size >= 1 ? "Somewhat" : "Typical"
+  const label = size >= 2
+      ? "Marked deviation"
+      : size >= 1
+        ? "Mild deviation"
+        : "Within baseline"
   return (
     <span className="flex items-center justify-end gap-2">
       <span className="font-mono text-xs text-muted-foreground">
-        z {z > 0 ? "+" : ""}
-        {z.toFixed(1)}
+        {z > 0 ? "+" : ""}
+        {z.toFixed(1)} SD
       </span>
       <Badge
         variant={size >= 2 ? "default" : size >= 1 ? "secondary" : "outline"}
@@ -112,7 +117,7 @@ function ClinicianChanges({
             <TableHead className="text-right">{report.hours} h ago</TableHead>
             <TableHead className="text-right">Now</TableHead>
             <TableHead className="text-right">Change</TableHead>
-            <TableHead className="text-right">vs own week</TableHead>
+            <TableHead className="text-right">vs 7-day baseline</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -131,7 +136,7 @@ function ClinicianChanges({
                   <span className="flex items-center gap-2">
                     {info?.label ?? c.label}
                     {shifts.has(c.metric) ? (
-                      <Badge variant="outline">Top shift</Badge>
+                      <Badge variant="outline">Largest deviation</Badge>
                     ) : null}
                   </span>
                 </TableCell>
@@ -166,13 +171,13 @@ function ClinicianChanges({
 
       {cohort?.length ? (
         <div className="flex flex-col gap-2">
-          <h3 className="text-sm font-medium">Where they sit in the cohort</h3>
+          <h3 className="text-sm font-medium">Position within panel</h3>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Metric</TableHead>
                 <TableHead className="text-right">Value</TableHead>
-                <TableHead className="text-right">Cohort median</TableHead>
+                <TableHead className="text-right">Panel median</TableHead>
                 <TableHead className="text-right">Percentile</TableHead>
               </TableRow>
             </TableHeader>
@@ -191,7 +196,7 @@ function ClinicianChanges({
                     <TableCell className="text-right">
                       <span className="flex items-center justify-end gap-1 tabular-nums">
                         <DirectionIcon value={d.z_score} />
-                        {Math.round(d.percentile)}th
+                        {ordinal(d.percentile)}
                       </span>
                     </TableCell>
                   </TableRow>
@@ -224,7 +229,12 @@ function PatientChanges({
   const metrics = useMetrics()
   const shifts = report.largest_shifts
   const rows = report.changes
-    .filter((c) => c.metric !== GLUCO_SCORE && c.metric !== GLUCO_CHANGE)
+    .filter(
+      (c) =>
+        c.metric !== GLUCO_SCORE &&
+        c.metric !== GLUCO_CHANGE &&
+        Math.abs(c.z_vs_baseline ?? 0) >= 1
+    )
     .sort((a, b) => {
       const rank = (c: MetricChange) => {
         const i = shifts.indexOf(c.metric)
@@ -235,19 +245,34 @@ function PatientChanges({
         Math.abs(b.z_vs_baseline ?? 0) - Math.abs(a.z_vs_baseline ?? 0)
       )
     })
+    .slice(0, 3)
+
+  if (rows.length === 0)
+    return (
+      <p className="text-sm text-muted-foreground">
+        Everything is close to your usual week. Nothing stands out.
+      </p>
+    )
 
   return (
     <ItemGroup className="gap-2">
       {rows.map((c) => {
         const info = metrics.get(c.metric)
+        const status = usualStatus(c.z_vs_baseline, info?.higher_is_better)
+        const Icon = status.icon
         return (
           <Item key={c.metric} variant="muted" size="sm">
-            <ItemMedia variant="icon">
-              <DirectionIcon
-                value={
-                  Math.abs(c.z_vs_baseline ?? 0) >= 1 ? c.z_vs_baseline : 0
-                }
-              />
+            <ItemMedia
+              variant="icon"
+              className={
+                status.tone === "notable"
+                  ? "bg-notable/15 text-notable"
+                  : status.tone === "watch"
+                    ? "bg-watch/15 text-watch"
+                    : "bg-accent text-primary"
+              }
+            >
+              <Icon />
             </ItemMedia>
             <ItemContent>
               <ItemTitle>{sentence(c, info?.label ?? c.label)}</ItemTitle>
@@ -282,13 +307,15 @@ export function WhatChanged({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>What changed</CardTitle>
+        <CardTitle>
+          {audience === "patient" ? "What stands out" : "What changed"}
+        </CardTitle>
         <CardDescription>
           {audience === "patient"
-            ? "How your readings compare with your own usual week."
+            ? "The readings that moved most from your usual week."
             : explain.data
-              ? `Latest window (${formatReplayTime(explain.data.change.now_window_end)}) vs ${hours} h earlier and vs their own last 7 days.`
-              : "Latest window vs earlier, and vs their own last 7 days."}
+              ? `Latest 24 h window (${formatReplayTime(explain.data.change.now_window_end)}) compared with ${hours} h earlier and with the patient's own 7-day baseline.`
+              : "Latest 24 h window compared with earlier and with the patient's own 7-day baseline."}
         </CardDescription>
         <CardAction>
           <ToggleGroup
@@ -311,7 +338,7 @@ export function WhatChanged({
         {explain.isError ? (
           <Alert variant="destructive">
             <TriangleAlertIcon />
-            <AlertDescription>{explain.error.message}</AlertDescription>
+            <AlertDescription>{friendlyError(explain.error)}</AlertDescription>
           </Alert>
         ) : !explain.data ? (
           <div className="flex flex-col gap-2">
@@ -331,9 +358,9 @@ export function WhatChanged({
       <CardFooter>
         <p className="text-xs text-muted-foreground">
           {audience === "patient"
-            ? "These are patterns that moved together, not causes. Your Gluco Score is an estimate, not a diagnosis."
+            ? "These readings changed around the same time, but one doesn't necessarily cause another. Your Gluco Score is an estimate, not a diagnosis."
             : (explain.data?.change.note ??
-              "These are associations, not causes. The Gluco Score is a model estimate, not a diagnosis.")}
+              "These are associations, not causal relationships. The Gluco Score is a model estimate and is not diagnostic.")}
         </p>
       </CardFooter>
     </Card>

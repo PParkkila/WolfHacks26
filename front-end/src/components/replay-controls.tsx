@@ -25,7 +25,7 @@ export function AsOf() {
   if (!clock?.now) return <Skeleton className="h-4 w-44" />
   return (
     <span className="flex items-center gap-1.5 text-sm whitespace-nowrap">
-      <span className="text-muted-foreground">As of</span>
+      <span className="text-muted-foreground">Data as of</span>
       <time dateTime={clock.now} className="font-medium tabular-nums">
         {formatReplayTime(clock.now)} UTC
       </time>
@@ -34,14 +34,14 @@ export function AsOf() {
           <button
             type="button"
             className="text-muted-foreground"
-            aria-label="About the replay clock"
+            aria-label="About the demo time"
           >
             <InfoIcon className="size-3.5" />
           </button>
         </TooltipTrigger>
         <TooltipContent className="max-w-64">
-          A shared demo clock replays the published week as if it were live.
-          Moving it moves everyone&apos;s view.
+          This demo moves through a week of data as if it were happening now.
+          Changing the time changes everyone&apos;s view.
         </TooltipContent>
       </Tooltip>
     </span>
@@ -65,24 +65,24 @@ export function ReplayControls() {
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
       <div className="flex items-center gap-3">
         <Badge variant="outline" className="bg-background">
-          Demo replay
+          Demo time
         </Badge>
         <Button
           size="icon-sm"
           variant="outline"
           disabled={!clock.enabled || (clock.at_end && !clock.playing)}
           onClick={() => control({ action: clock.playing ? "pause" : "play" })}
-          aria-label={clock.playing ? "Pause replay" : "Play replay"}
+          aria-label={clock.playing ? "Pause demo" : "Play demo"}
         >
           {clock.playing ? <PauseIcon /> : <PlayIcon />}
         </Button>
         <AsOf />
-        {clock.at_end ? <Badge variant="secondary">End of data</Badge> : null}
+        {clock.at_end ? <Badge variant="secondary">End of demo data</Badge> : null}
       </div>
 
       <div className="flex min-w-48 flex-1 items-center gap-3">
         <Slider
-          aria-label="Replay position"
+          aria-label="Demo time position"
           min={start}
           max={end}
           step={HOUR_MS}
@@ -104,7 +104,7 @@ export function ReplayControls() {
       </div>
 
       <div className="flex items-center gap-2">
-        <span className="text-xs text-muted-foreground">1 hour every</span>
+        <span className="text-xs text-muted-foreground">1 hour of data every</span>
         <ToggleGroup
           type="single"
           size="sm"
@@ -114,7 +114,7 @@ export function ReplayControls() {
             if (value)
               void control({ action: "speed", seconds_per_hour: Number(value) })
           }}
-          aria-label="Replay speed"
+          aria-label="Demo speed"
         >
           {SPEEDS.map((seconds) => (
             <ToggleGroupItem key={seconds} value={String(seconds)}>

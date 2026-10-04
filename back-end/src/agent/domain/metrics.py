@@ -22,60 +22,63 @@ GLUCO_CHANGE = "gluco_change_24h"
 METRICS: dict[str, MetricSpec] = {
     GLUCO_SCORE: MetricSpec(
         "Gluco Score",
-        "points (0-100)",
-        "How closely the last 24 hours of wearable data resemble the study's "
-        "healthier (lower-HbA1c) group. Higher is healthier. A model estimate, "
-        "not a glucose reading or a diagnosis.",
+        "points out of 100",
+        "How closely the last 24 hours of wearable data resemble people with "
+        "healthier blood sugar. Higher is healthier. A model estimate, not a "
+        "blood sugar reading or a diagnosis.",
         True,
     ),
     GLUCO_CHANGE: MetricSpec(
         "Gluco Score change (24 h)",
         "points",
-        "Gluco Score now minus Gluco Score 24 hours earlier.",
+        "How much the Gluco Score has moved compared with 24 hours ago.",
         True,
     ),
     "hr_mean_bpm_24h": MetricSpec(
         "Mean heart rate",
         "bpm",
-        "Mean heart rate over the last 24 hours.",
+        "Average heart rate over the last 24 hours.",
         None,
     ),
     "motion_mean_g": MetricSpec(
-        "Mean movement",
+        "Average movement",
         "g",
-        "Mean wrist acceleration over the last 24 hours; higher means more movement.",
+        "How much your wrist moved on average over the last 24 hours; higher "
+        "means more movement.",
         True,
     ),
     "motion_std_g": MetricSpec(
         "Movement variability",
         "g",
-        "How much wrist movement varied over the last 24 hours.",
+        "How much your wrist movement went up and down over the last 24 hours.",
         None,
     ),
     "motion_p90_g": MetricSpec(
-        "Peak movement (90th percentile)",
+        "Peak movement",
         "g",
-        "The level of wrist movement exceeded only 10% of the time in the last "
-        "24 hours; a proxy for the more active moments of the day.",
+        "How active your most active moments were over the last 24 hours "
+        "(the movement level you were above only 10% of the time).",
         None,
     ),
     "temperature_mean_c_24h": MetricSpec(
-        "Mean skin temperature",
+        "Average skin temperature",
         "°C",
-        "Mean wrist skin temperature over the last 24 hours (not core body "
-        "temperature).",
+        "Average skin temperature at the wrist over the last 24 hours (not your "
+        "core body temperature).",
         None,
     ),
     "temperature_std_c_24h": MetricSpec(
         "Skin temperature variability",
         "°C",
-        "How much wrist skin temperature varied over the last 24 hours.",
+        "How much skin temperature at the wrist went up and down over the last "
+        "24 hours.",
         None,
     ),
     "motion_hr_correlation": MetricSpec(
-        "Movement-heart rate coupling",
-        "correlation (-1 to 1)",
-        "How closely heart rate followed movement over the last 24 hours.",
+        "Movement and heart rate link",
+        "-1 to 1",
+        "How closely your heart rate followed your movement over the last 24 "
+        "hours (closer to 1 means they moved together).",
         None,
     ),
 }
@@ -88,3 +91,9 @@ SENSOR_METRICS: tuple[str, ...] = tuple(
 
 def unit_of(metric: str) -> str:
     return METRICS[metric].unit
+
+
+def metric_label(metric: str) -> str:
+    """The readable name for a metric key; an unknown key is returned as given."""
+    spec = METRICS.get(metric)
+    return spec.label if spec else metric

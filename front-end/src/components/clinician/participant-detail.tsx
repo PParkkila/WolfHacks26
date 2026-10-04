@@ -7,7 +7,6 @@ import { useState } from "react"
 import { GlucoScore } from "@/components/gluco-score"
 import { QueryChart } from "@/components/query-chart"
 import { WhatChanged } from "@/components/what-changed"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -26,6 +25,7 @@ import {
 } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { friendlyError } from "@/lib/api/client"
 import type { QueryResult } from "@/lib/api/events"
 import { useParticipant, useSeries } from "@/lib/api/queries"
 import { GLUCO_CHANGE, GLUCO_SCORE, useMetrics } from "@/lib/catalog"
@@ -80,7 +80,7 @@ export function ParticipantDetail({ id }: { id: string }) {
     <Button variant="ghost" size="sm" asChild className="self-start">
       <Link href="/clinician">
         <ArrowLeftIcon data-icon="inline-start" />
-        All participants
+        All patients
       </Link>
     </Button>
   )
@@ -94,12 +94,12 @@ export function ParticipantDetail({ id }: { id: string }) {
             <EmptyMedia variant="icon">
               <UserRoundXIcon />
             </EmptyMedia>
-            <EmptyTitle>Participant not available</EmptyTitle>
-            <EmptyDescription>{participant.error.message}</EmptyDescription>
+            <EmptyTitle>Patient not found</EmptyTitle>
+            <EmptyDescription>{friendlyError(participant.error)}</EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
             <Button variant="outline" size="sm" asChild>
-              <Link href="/clinician">Back to the cohort</Link>
+              <Link href="/clinician">Back to patient panel</Link>
             </Button>
           </EmptyContent>
         </Empty>
@@ -135,9 +135,8 @@ export function ParticipantDetail({ id }: { id: string }) {
               <h1 className="text-2xl font-bold tracking-tight">
                 {row.display_name}
               </h1>
-              <Badge variant="outline">{row.source_dataset}</Badge>
               <span className="text-sm text-muted-foreground">
-                Latest window ends {formatReplayTime(row.window_end)} UTC
+                Latest 24 h window ends {formatReplayTime(row.window_end)} UTC
               </span>
             </>
           ) : (
@@ -151,7 +150,7 @@ export function ParticipantDetail({ id }: { id: string }) {
         <Card>
           <CardHeader>
             <CardTitle>Gluco Score</CardTitle>
-            <CardDescription>Newest window</CardDescription>
+            <CardDescription>Most recent 24 h window</CardDescription>
           </CardHeader>
           <CardContent>
             {row ? (
@@ -168,7 +167,7 @@ export function ParticipantDetail({ id }: { id: string }) {
         <Card className="@4xl/main:col-span-2">
           <CardHeader>
             <CardTitle>Gluco Score trend</CardTitle>
-            <CardDescription>Hourly, up to the replay clock.</CardDescription>
+            <CardDescription>Hourly, up to the time shown.</CardDescription>
           </CardHeader>
           <CardContent>
             <ChartBody query={gluco} height={220} showTitles={false} />
@@ -180,7 +179,7 @@ export function ParticipantDetail({ id }: { id: string }) {
         <CardHeader>
           <CardTitle>Sensor trends</CardTitle>
           <CardDescription>
-            Each reading summarises the 24 hours before it.
+            Each point reflects the preceding 24 hours.
           </CardDescription>
         </CardHeader>
         <CardContent>

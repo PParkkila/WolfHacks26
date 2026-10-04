@@ -42,9 +42,10 @@ MAX_SERIES = 200
 MAX_POINTS = 10_000
 PATIENT_ONLY_OWN = "You can only see your own data."
 CHANGE_NOTE = (
-    "Deltas compare the newest window with the one N hours earlier; z-scores "
-    "compare the newest value with this person's own last 7 days. These are "
-    "associations, not causes, and the Gluco Score is a model estimate, not a "
+    "Changes compare the most recent 24 h window with the one N hours earlier; "
+    "standard deviation (SD) scores compare the latest value with this "
+    "patient's own last 7 days. These are associations, not causal "
+    "relationships, and the Gluco Score is a model estimate, not a "
     "measurement or a diagnosis."
 )
 
@@ -251,7 +252,9 @@ class QueryService:
 
     def require_clinician(self) -> None:
         if not self.is_clinician:
-            raise ForbiddenError("Only clinicians can see cohort-wide data.")
+            raise ForbiddenError(
+                "Only clinicians can see data for the whole patient panel."
+            )
 
     def _history(
         self, person_id: str, start: datetime | None = None, end: datetime | None = None
@@ -269,7 +272,7 @@ class QueryService:
     def _require_latest(self, person_id: str) -> Window:
         window = self.latest(person_id)
         if window is None:
-            raise QueryError(f"No data for {person_id} up to now.")
+            raise QueryError(f"There are no readings for {person_id} up to now.")
         return window
 
     def _row(self, window: Window) -> ParticipantRow:
@@ -460,7 +463,7 @@ class QueryService:
             raise QueryError(f"{person_id} has no value for {metric!r}.")
         deviation = describe_feature(metric, value, stat) if stat else None
         if stat is None or deviation is None:
-            raise QueryError(f"{metric!r} does not vary across the cohort.")
+            raise QueryError(f"{metric!r} does not vary across the patient panel.")
         return CohortComparison(
             person_id=person_id,
             metric=metric,

@@ -22,10 +22,34 @@ import {
 } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
-/** "get_my_status" -> "Get my status" */
-function humanize(tool: string) {
-  const words = tool.replace(/[_-]+/g, " ").trim()
-  return words.charAt(0).toUpperCase() + words.slice(1)
+/** What Gluco is doing while a tool runs, and once it has finished. */
+const TOOL_LABELS: Record<Audience, Record<string, [string, string]>> = {
+  patient: {
+    get_my_status: ["Checking your latest score", "Checked your latest score"],
+    explain_my_change: ["Looking at what changed", "Looked at what changed"],
+    get_my_trend: ["Reviewing your recent days", "Reviewed your recent days"],
+    query_my_data: [
+      "Looking through your readings",
+      "Looked through your readings",
+    ],
+  },
+  clinician: {
+    list_participants: ["Ranking patients", "Ranked patients"],
+    get_participant: ["Retrieving patient summary", "Retrieved patient summary"],
+    explain_change: [
+      "Analysing change against baseline",
+      "Analysed change against baseline",
+    ],
+    compare_to_cohort: ["Comparing with panel", "Compared with panel"],
+    cohort_overview: ["Summarising panel", "Summarised panel"],
+    query_data: ["Retrieving readings", "Retrieved readings"],
+  },
+}
+
+function toolLabel(tool: string, audience: Audience, done: boolean) {
+  const labels = TOOL_LABELS[audience][tool]
+  if (labels) return labels[done ? 1 : 0]
+  return done ? "Looked that up" : "Looking that up"
 }
 
 function Part({ part, audience }: { part: ChatPart; audience: Audience }) {
@@ -50,8 +74,8 @@ function Part({ part, audience }: { part: ChatPart; audience: Audience }) {
               part.status === "running" && "shimmer"
             )}
           >
-            {humanize(part.tool)}
-            {/* Tool summaries are technical; patients see only what was looked up. */}
+            {toolLabel(part.tool, audience, part.status !== "running")}
+            {/* Summaries are for clinicians only; patients see just the activity label. */}
             {part.summary && audience === "clinician"
               ? ` · ${part.summary}`
               : ""}
@@ -64,6 +88,7 @@ function Part({ part, audience }: { part: ChatPart; audience: Audience }) {
           <QueryChart
             result={part.chart}
             snapshot
+            hideNote
             height={160}
             audience={audience}
           />
@@ -112,7 +137,9 @@ export function ChatMessage({
             <MarkerIcon>
               <Spinner />
             </MarkerIcon>
-            <MarkerContent className="shimmer text-xs">Thinking…</MarkerContent>
+            <MarkerContent className="shimmer text-xs">
+              {audience === "patient" ? "One moment…" : "Thinking…"}
+            </MarkerContent>
           </Marker>
         ) : null}
         {message.parts.map((part, index) => (
@@ -133,8 +160,10 @@ export function ChatMessage({
                   </Badge>
                 </TooltipTrigger>
                 <TooltipContent className="max-w-64">
-                  These figures in the answer didn&apos;t come from any data
-                  lookup: {message.ungrounded.join(", ")}. Treat them with care.
+                  {audience === "patient"
+                    ? "A few numbers in this answer couldn't be matched to your data. Please double-check them: "
+                    : "These figures were not returned by any data query. Verify before relying on them: "}
+                  {message.ungrounded.join(", ")}.
                 </TooltipContent>
               </Tooltip>
             ) : null}

@@ -87,7 +87,7 @@ function AppFrame({
           >
             <SheetHeader className="sr-only">
               <SheetTitle>Gluco</SheetTitle>
-              <SheetDescription>Ask questions about the data.</SheetDescription>
+              <SheetDescription>Ask Gluco questions about the health data.</SheetDescription>
             </SheetHeader>
             <ChatPanel
               audience={audience}

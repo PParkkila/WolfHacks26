@@ -8,11 +8,12 @@ from typing import Any, Literal
 
 from agents import FunctionTool, function_tool
 
-from agent.domain.metrics import GLUCO_SCORE
+from agent.domain.metrics import GLUCO_SCORE, metric_label
 from agent.query import QueryService, QuerySpec
 from agent.tools.base import (
     chart,
     dump,
+    grouping_phrase,
     parse_time,
     require_points,
     result,
@@ -88,7 +89,7 @@ def build(svc: QueryService) -> list[FunctionTool]:
             QuerySpec(metrics=[metric], hours=hours, bucket=bucket, agg="mean")
         )
         return result(
-            summary=f"{metric} over the last {hours:g} h",
+            summary=f"{metric_label(metric)} over the last {hours:g} h",
             rows=sum(len(s.points) for s in trend.series),
             as_of=svc.as_of(),
             trend=week_summary(trend, metric),
@@ -133,7 +134,10 @@ def build(svc: QueryService) -> list[FunctionTool]:
             )
         )
         return result(
-            summary=f"{', '.join(metrics)} ({bucket}, {agg})",
+            summary=(
+                f"{', '.join(metric_label(m) for m in metrics)} "
+                f"({grouping_phrase(bucket, agg)})"
+            ),
             rows=sum(len(s.points) for s in answer.series),
             as_of=svc.as_of(),
             chart=chart(answer),

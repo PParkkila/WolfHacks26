@@ -24,6 +24,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { friendlyError } from "@/lib/api/client"
 import { usePersonas } from "@/lib/api/queries"
 import { useAuth } from "@/lib/auth"
 import type { Principal } from "@/lib/session"
@@ -59,10 +60,10 @@ function PersonaSwitcher({
     if (persona.user_id === current.user_id) return
     try {
       await login(persona.user_id)
-      toast.success(`Signed in as ${persona.display_name}`)
+      toast.success(`Switched to ${persona.display_name}`)
     } catch (error) {
       toast.error(`Couldn't switch to ${persona.display_name}.`, {
-        description: error instanceof Error ? error.message : undefined,
+        description: friendlyError(error),
       })
     }
   }
@@ -76,14 +77,14 @@ function PersonaSwitcher({
     <CommandDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Switch persona"
-      description="Sign in as another persona"
+      title="Switch profile"
+      description="Explore Gluco as someone else"
     >
       <Command>
-        <CommandInput placeholder="Search personas…" />
+        <CommandInput placeholder="Search profiles…" />
         <CommandList>
           <CommandEmpty>
-            {personas.isPending ? "Loading…" : "No persona found."}
+            {personas.isPending ? "Loading…" : "No profile found."}
           </CommandEmpty>
           {groups.map(({ heading, role, icon: Icon }) => (
             <CommandGroup key={role} heading={heading}>
@@ -144,7 +145,7 @@ export function PersonaMenu({ principal }: { principal: Principal }) {
           <DropdownMenuGroup>
             <DropdownMenuItem onSelect={() => setSwitching(true)}>
               <UsersIcon />
-              Switch persona…
+              Switch profile…
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={logout}>
               <LogOutIcon />

@@ -3,6 +3,7 @@ import { EventSourceParserStream } from "eventsource-parser/stream"
 import {
   API_BASE_URL,
   ApiError,
+  OFFLINE_MESSAGE,
   authHeader,
   handleUnauthorized,
 } from "@/lib/api/client"
@@ -29,7 +30,7 @@ export async function streamSSE(
     })
   } catch (cause) {
     if (init.signal.aborted) throw cause
-    throw new ApiError(0, undefined, "Can't reach the Gluco API.", cause)
+    throw new ApiError(0, undefined, OFFLINE_MESSAGE, cause)
   }
 
   if (!response.ok || !response.body) {

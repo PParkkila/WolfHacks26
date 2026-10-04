@@ -21,8 +21,8 @@ from agent.observability.trace import Outcome, Tracer
 log = logging.getLogger(__name__)
 
 MAX_TURNS_REPLY = (
-    "I couldn't finish working that out within my step limit. "
-    "Try a narrower question, for example about one metric or one day."
+    "That was a bit too much to work out in one go. "
+    "Could you try a narrower question, for example about one measurement or one day?"
 )
 
 RunStreamed = Callable[..., Any]

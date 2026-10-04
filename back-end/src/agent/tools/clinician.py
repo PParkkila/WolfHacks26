@@ -9,12 +9,13 @@ from typing import Any, Literal
 from agents import FunctionTool, function_tool
 
 from agent.analysis.ids import display_name
-from agent.domain.metrics import GLUCO_SCORE
+from agent.domain.metrics import GLUCO_SCORE, metric_label
 from agent.query import QueryService, QuerySpec
 from agent.tools.base import (
     MAX_ROWS,
     chart,
     dump,
+    grouping_phrase,
     parse_time,
     require_points,
     result,
@@ -47,7 +48,10 @@ def build(svc: QueryService) -> list[FunctionTool]:
         rows = svc.participants(sort_by, order)
         shown = rows[:top_k]
         return result(
-            summary=f"{len(shown)} of {len(rows)} participants by {sort_by} {order}",
+            summary=(
+                f"{len(shown)} of {len(rows)} patients by "
+                f"{metric_label(sort_by)} ({order})"
+            ),
             rows=len(shown),
             as_of=svc.as_of(),
             participants=[dump(r) for r in shown],
@@ -133,8 +137,8 @@ def build(svc: QueryService) -> list[FunctionTool]:
         comparison = svc.compare_to_cohort(pid, metric)
         return result(
             summary=(
-                f"{display_name(pid)} {metric}: {comparison.value} vs cohort median "
-                f"{comparison.cohort_median}"
+                f"{display_name(pid)} {metric_label(metric)}: {comparison.value} vs "
+                f"panel median {comparison.cohort_median}"
             ),
             rows=1,
             as_of=svc.as_of(),
@@ -148,7 +152,7 @@ def build(svc: QueryService) -> list[FunctionTool]:
         24 h drops and gains, and every metric's mean, median and range."""
         overview = svc.cohort_overview()
         return result(
-            summary=f"Cohort of {overview.participants} participants",
+            summary=f"Panel of {overview.participants} patients",
             rows=overview.participants,
             as_of=svc.as_of(),
             overview=dump(overview),
@@ -206,7 +210,8 @@ def build(svc: QueryService) -> list[FunctionTool]:
         answer = require_points(svc.query(spec))
         return result(
             summary=(
-                f"{len(answer.series)} series of {', '.join(metrics)} ({bucket}, {agg})"
+                f"{', '.join(metric_label(m) for m in metrics)} "
+                f"({grouping_phrase(bucket, agg)})"
             ),
             rows=sum(len(s.points) for s in answer.series),
             as_of=svc.as_of(),

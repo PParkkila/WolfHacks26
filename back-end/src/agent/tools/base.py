@@ -106,13 +106,13 @@ def safe_tool[F: Callable[..., dict[str, Any]]](fn: F) -> F:
         except PersonNotFoundError as exc:
             return error(
                 "not_found",
-                f"No participant matches {exc.ref!r}.",
+                f"No patient matches {exc.ref!r}.",
                 suggestions=exc.suggestions,
             )
         except AmbiguousPersonError as exc:
             return error(
                 "ambiguous",
-                f"{exc.ref!r} matches several participants; ask which one.",
+                f"{exc.ref!r} matches several patients; ask which one.",
                 candidates=exc.candidates,
             )
         except ForbiddenError as exc:
@@ -125,11 +125,21 @@ def safe_tool[F: Callable[..., dict[str, Any]]](fn: F) -> F:
             log.exception("tool %s failed", fn.__name__)
             return error(
                 "internal_error",
-                "The data source failed to answer this request; it may be retried.",
+                "The data source could not answer this request right now; it may "
+                "be retried.",
                 detail=type(exc).__name__,
             )
 
     return wrapper  # type: ignore[return-value]
+
+
+def grouping_phrase(bucket: str, agg: str) -> str:
+    """ "mean per day", "latest value" ... for a tool summary."""
+    if bucket == "raw":
+        return "every reading"
+    if bucket == "all":
+        return f"{agg} over the whole range"
+    return f"{agg} per {bucket}"
 
 
 def week_summary(result: QueryResult, metric: str) -> dict[str, Any] | None:

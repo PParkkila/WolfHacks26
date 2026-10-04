@@ -36,6 +36,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { friendlyError } from "@/lib/api/client"
 import { useParticipants, type SortOrder } from "@/lib/api/queries"
 import {
   formatValue,
@@ -116,10 +117,10 @@ export function ParticipantTable() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Participants</CardTitle>
+        <CardTitle>Patients</CardTitle>
         <CardDescription>
-          Each participant&apos;s newest window. Select a column to sort; select
-          a row for detail.
+          Most recent 24 h window for each patient. Select a column to sort;
+          select a row for detail.
         </CardDescription>
         <CardAction>{participants.isFetching ? <Spinner /> : null}</CardAction>
       </CardHeader>
@@ -127,7 +128,7 @@ export function ParticipantTable() {
         {participants.isError ? (
           <Alert variant="destructive">
             <TriangleAlertIcon />
-            <AlertDescription>{participants.error.message}</AlertDescription>
+            <AlertDescription>{friendlyError(participants.error)}</AlertDescription>
           </Alert>
         ) : !participants.data || !metrics.ready ? (
           <div className="flex flex-col gap-2">
@@ -139,7 +140,7 @@ export function ParticipantTable() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="align-bottom">Participant</TableHead>
+                <TableHead className="align-bottom">Patient</TableHead>
                 {metrics.list.map((metric) => (
                   <SortHeader
                     key={metric.name}
@@ -149,7 +150,7 @@ export function ParticipantTable() {
                   />
                 ))}
                 <TableHead className="text-right align-bottom">
-                  Latest window
+                  Latest reading
                 </TableHead>
               </TableRow>
             </TableHeader>

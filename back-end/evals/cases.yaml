@@ -61,7 +61,7 @@
 - id: 8
   tier: 1
   question: What is patient 99's Gluco Score?
-  answer_any: ['not found', 'no participant', "doesn't exist", 'does not exist', "(?:could|can)(?:n't| ?not) find", 'no .*match']
+  answer_any: ['not found', 'no participant', 'no patient', "doesn't exist", 'does not exist', "(?:could|can)(?:n't| ?not) find", 'no .*match']
 
 # --- patient (Patient 013) -------------------------------------------------------------
 

@@ -20,6 +20,8 @@
   --color-sidebar: var(--sidebar);
   --color-chart-5: var(--chart-5);
   --color-brand-track: var(--brand-track);
+  --color-watch: var(--watch);
+  --color-notable: var(--notable);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
   --color-chart-2: var(--chart-2);
@@ -79,6 +81,11 @@
   --ring: oklch(0.58 0.07 190);
   /* The unfilled part of the Gluco Score ring: a light step of the brand ramp. */
   --brand-track: oklch(0.89 0.03 188);
+  /* "Compared with your usual" tones. Teal (primary) means usual or a change in
+     the healthy direction; these two mean "worth a look". Always shown with an
+     icon and a label, never colour alone. */
+  --watch: oklch(0.6 0.13 70);
+  --notable: oklch(0.57 0.16 40);
   /* Categorical series slots, validated for colour-vision deficiency in order
      against the card surface. Single-series charts use --primary instead. */
   --chart-1: #2a78d6;
@@ -117,6 +124,8 @@
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.62 0.07 185);
   --brand-track: oklch(0.38 0.03 186);
+  --watch: oklch(0.8 0.13 80);
+  --notable: oklch(0.73 0.14 45);
   --chart-1: #3987e5;
   --chart-2: #d95926;
   --chart-3: #199e70;

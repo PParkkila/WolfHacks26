@@ -11,7 +11,7 @@ import {
   useState,
 } from "react"
 
-import { api, ApiError, unwrap } from "@/lib/api/client"
+import { api, ApiError, friendlyError, unwrap } from "@/lib/api/client"
 import type { ChatEvent, QueryResult } from "@/lib/api/events"
 import { keys } from "@/lib/api/queries"
 import { streamSSE } from "@/lib/api/sse"
@@ -175,8 +175,8 @@ export function ChatProvider({
           }
           const text =
             error instanceof ApiError
-              ? error.message
-              : "The assistant couldn't be reached."
+              ? friendlyError(error)
+              : "Gluco couldn't be reached. Please try again."
           update((m) => ({
             ...m,
             parts: [...m.parts, { kind: "error", message: text }],
@@ -240,10 +240,7 @@ export function ChatProvider({
             parts: [
               {
                 kind: "error",
-                message:
-                  error instanceof Error
-                    ? error.message
-                    : "Couldn't open that conversation.",
+                message: friendlyError(error),
               },
             ],
           },

@@ -11,7 +11,13 @@ import {
 } from "react"
 import { toast } from "sonner"
 
-import { api, ApiError, unwrap, type Schemas } from "@/lib/api/client"
+import {
+  api,
+  ApiError,
+  friendlyError,
+  unwrap,
+  type Schemas,
+} from "@/lib/api/client"
 import type { ClockState, TickEvent } from "@/lib/api/events"
 import { keys } from "@/lib/api/queries"
 import { streamSSE } from "@/lib/api/sse"
@@ -93,8 +99,8 @@ export function ClockProvider({
     try {
       setClock(await unwrap(api.POST("/clock", { body: command })))
     } catch (error) {
-      toast.error("The replay clock didn't respond.", {
-        description: error instanceof Error ? error.message : undefined,
+      toast.error("Couldn't change the demo time.", {
+        description: friendlyError(error),
       })
     }
   }, [])

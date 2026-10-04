@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/item"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
-import { API_BASE_URL } from "@/lib/api/client"
+import { friendlyError } from "@/lib/api/client"
 import { usePersonas } from "@/lib/api/queries"
 import { useAuth, useSession } from "@/lib/auth"
 import { homeFor, type Principal } from "@/lib/session"
@@ -79,8 +79,8 @@ export default function PersonaPickerPage() {
       await login(persona.user_id)
     } catch (error) {
       setPending(null)
-      toast.error(`Couldn't sign in as ${persona.display_name}.`, {
-        description: error instanceof Error ? error.message : undefined,
+      toast.error(`Couldn't sign you in as ${persona.display_name}.`, {
+        description: friendlyError(error),
       })
     }
   }
@@ -97,13 +97,14 @@ export default function PersonaPickerPage() {
             Your wearable, explained in plain language.
           </h1>
           <p className="max-w-md text-lg text-muted-foreground">
-            Gluco scores each day of wearable data and answers questions about
-            it, for people at risk of diabetes and their care team.
+            Gluco turns your wearable&apos;s daily readings into a simple score
+            and answers your questions about them, for people at risk of
+            diabetes and their care team.
           </p>
         </div>
         <p className="max-w-md text-xs text-muted-foreground">
-          The Gluco Score is a model estimate from wearable data. It is not a
-          glucose reading or a diagnosis.
+          The Gluco Score is an estimate based on wearable data. It is not a
+          blood sugar reading or a diagnosis.
         </p>
       </header>
 
@@ -113,18 +114,17 @@ export default function PersonaPickerPage() {
             Who&apos;s looking today?
           </h2>
           <p className="text-sm text-muted-foreground">
-            Pick a demo persona. There are no passwords: the server signs a
-            token for the persona you choose and decides what it may see from
-            that token alone.
+            This is a demo, so there&apos;s no sign-in. Choose who you&apos;d
+            like to explore Gluco as.
           </p>
         </div>
 
         {personas.isError ? (
           <Alert variant="destructive">
-            <AlertTitle>Can&apos;t load personas</AlertTitle>
+            <AlertTitle>Can&apos;t load profiles</AlertTitle>
             <AlertDescription>
-              The Gluco API at {API_BASE_URL} didn&apos;t answer. Start it with{" "}
-              <code>cd back-end &amp;&amp; just run</code>.
+              We couldn&apos;t reach Gluco just now. Please try again in a
+              moment.
             </AlertDescription>
           </Alert>
         ) : null}
@@ -142,7 +142,7 @@ export default function PersonaPickerPage() {
                   key={persona.user_id}
                   persona={persona}
                   icon={StethoscopeIcon}
-                  description="Sees every participant, cohort trends and Gluco in clinical mode."
+                  description="See every patient, trends across your panel, and a clinical view of the Gluco Score."
                   pending={pending === persona.user_id}
                   disabled={pending !== null}
                   onSelect={() => choose(persona)}
@@ -158,8 +158,7 @@ export default function PersonaPickerPage() {
               Patients
             </h3>
             <p className="text-sm text-muted-foreground">
-              Each patient sees only their own Gluco Score, readings and
-              assistant.
+              Patients see only their own Gluco Score, readings and assistant.
             </p>
           </div>
           {personas.isPending ? (

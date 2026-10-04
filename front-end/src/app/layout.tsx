@@ -19,7 +19,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Gluco",
   description:
-    "Gluco turns wearable data into a daily Gluco Score, with dashboards and an assistant for people at risk of diabetes and their clinicians.",
+    "Gluco turns your wearable's daily readings into a simple score, with easy-to-read dashboards and an assistant for people at risk of diabetes and their care team.",
 }
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

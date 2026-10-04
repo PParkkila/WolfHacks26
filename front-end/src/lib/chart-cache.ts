@@ -7,7 +7,7 @@ import type { QueryResult } from "@/lib/api/events"
 type Turns = Record<string, QueryResult[]>
 
 function storageKey(userId: string, sessionId: string) {
-  return `pulsecast:charts:${userId}:${sessionId}`
+  return `gluco:charts:${userId}:${sessionId}`
 }
 
 export function readCharts(userId: string, sessionId: string): Turns | null {

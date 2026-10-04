@@ -24,7 +24,7 @@ import {
   ItemTitle,
 } from "@/components/ui/item"
 import { Skeleton } from "@/components/ui/skeleton"
-import type { Schemas } from "@/lib/api/client"
+import { friendlyError, type Schemas } from "@/lib/api/client"
 import { useCohort, useSeries, type QuerySpec } from "@/lib/api/queries"
 import { formatValue, GLUCO_CHANGE, GLUCO_SCORE } from "@/lib/catalog"
 
@@ -80,7 +80,7 @@ function RowList({
       </CardHeader>
       <CardContent>
         {rows.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nobody yet.</p>
+          <p className="text-sm text-muted-foreground">No patients to show yet.</p>
         ) : (
           <ItemGroup className="gap-1">
             {rows.map((row) => (
@@ -115,8 +115,8 @@ export function CohortOverview() {
     return (
       <Alert variant="destructive">
         <TriangleAlertIcon />
-        <AlertTitle>Couldn&apos;t load the cohort</AlertTitle>
-        <AlertDescription>{cohort.error.message}</AlertDescription>
+        <AlertTitle>Couldn&apos;t load your patient panel</AlertTitle>
+        <AlertDescription>{friendlyError(cohort.error)}</AlertDescription>
       </Alert>
     )
   }
@@ -125,11 +125,11 @@ export function CohortOverview() {
   const gluco = data?.gluco_score
 
   return (
-    <section className="flex flex-col gap-4" aria-label="Cohort overview">
+    <section className="flex flex-col gap-4" aria-label="Patient panel overview">
       <div className="grid gap-4 @xl/main:grid-cols-2 @4xl/main:grid-cols-4">
         {data ? (
           <>
-            <Stat label="Participants" value={String(data.participants)} />
+            <Stat label="Patients" value={String(data.participants)} />
             <Stat
               label="Median Gluco Score"
               value={formatValue(GLUCO_SCORE, gluco?.median)}
@@ -161,17 +161,17 @@ export function CohortOverview() {
           <>
             <RowList
               title="Lowest Gluco Score"
-              description="Newest window, lowest first."
+              description="Most recent 24 h window, lowest first."
               rows={data.lowest_gluco}
             />
             <RowList
-              title="Biggest 24 h drops"
-              description="Largest fall since this time yesterday."
+              title="Largest 24 h declines"
+              description="Greatest decline since this time yesterday."
               rows={data.biggest_drops}
             />
             <RowList
-              title="Biggest 24 h gains"
-              description="Largest rise since this time yesterday."
+              title="Largest 24 h increases"
+              description="Greatest increase since this time yesterday."
               rows={data.biggest_gains}
             />
           </>
@@ -184,16 +184,16 @@ export function CohortOverview() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Cohort Gluco Score, last 7 days</CardTitle>
+          <CardTitle>Panel Gluco Score, last 7 days</CardTitle>
           <CardDescription>
-            Hourly mean across every participant.
+            Hourly mean across all patients.
           </CardDescription>
         </CardHeader>
         <CardContent>
           {trend.data ? (
             <QueryChart result={trend.data} showTitles={false} height={220} />
           ) : trend.isError ? (
-            <p className="text-sm text-destructive">{trend.error.message}</p>
+            <p className="text-sm text-destructive">{friendlyError(trend.error)}</p>
           ) : (
             <Skeleton className="h-56" />
           )}

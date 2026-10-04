@@ -51,9 +51,9 @@ import { useThreads } from "@/lib/api/queries"
 
 const SUGGESTIONS: Record<Audience, string[]> = {
   clinician: [
-    "Who needs follow-up?",
-    "Biggest Gluco Score drops in the last 24 h",
-    "Compare heart rate across the cohort this week",
+    "Which patients need follow-up?",
+    "Largest Gluco Score declines in the last 24 h",
+    "Compare average heart rate across my panel this week",
   ],
   patient: [
     "Why did my score change?",
@@ -123,8 +123,8 @@ function Composer({ audience }: { audience: Audience }) {
           aria-label="Message Gluco"
           placeholder={
             audience === "patient"
-              ? "Ask Gluco about your data…"
-              : "Ask Gluco about the cohort or a participant…"
+              ? "Ask Gluco about your health data…"
+              : "Ask about your panel or a specific patient…"
           }
           className="max-h-40 min-h-10"
           rows={1}
@@ -167,8 +167,8 @@ function Composer({ audience }: { audience: Audience }) {
       </InputGroup>
       <p className="text-xs text-muted-foreground">
         {audience === "patient"
-          ? "Gluco explains your own data. It can't diagnose or prescribe."
-          : "Answers come from the published data up to the replay clock. Check before acting."}
+          ? "Gluco can make mistakes. It explains your data but can't diagnose or give medical advice."
+          : "Gluco can make mistakes. Answers reflect data up to the time shown and don't replace clinical judgment."}
       </p>
     </form>
   )
@@ -244,8 +244,8 @@ export function ChatPanel({
                       </EmptyTitle>
                       <EmptyDescription>
                         {audience === "patient"
-                          ? "Plain-language answers about your own Gluco Score and wearable readings."
-                          : "Answers use the same data as the dashboard, up to the replay clock."}
+                          ? "Simple answers about your own Gluco Score and wearable readings."
+                          : "Answers use the same data as the dashboard, up to the time shown."}
                       </EmptyDescription>
                     </EmptyHeader>
                     <EmptyContent>
@@ -271,8 +271,7 @@ export function ChatPanel({
                     <MessageScrollerItem>
                       <Marker variant="separator">
                         <MarkerContent className="text-xs">
-                          Charts from earlier answers weren&apos;t saved in this
-                          browser
+                          Charts from earlier answers aren&apos;t available here
                         </MarkerContent>
                       </Marker>
                     </MessageScrollerItem>

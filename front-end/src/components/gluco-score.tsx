@@ -12,7 +12,7 @@ const STEADY = 1
 
 export function ChangeBadge({ change }: { change: number | null | undefined }) {
   if (change == null)
-    return <Badge variant="outline">No 24 h comparison yet</Badge>
+    return <Badge variant="outline">No 24 h comparison available</Badge>
   const Icon =
     change >= STEADY
       ? ArrowUpRightIcon
@@ -30,7 +30,7 @@ export function ChangeBadge({ change }: { change: number | null | undefined }) {
       }
     >
       <Icon data-icon="inline-start" />
-      {formatValue(GLUCO_CHANGE, change, { signed: true })} pts vs 24 h ago
+      {formatValue(GLUCO_CHANGE, change, { signed: true })} pts vs 24 h prior
     </Badge>
   )
 }

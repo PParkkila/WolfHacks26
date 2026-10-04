@@ -30,13 +30,17 @@ Credentials = Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)]
 def current_principal(runtime: RuntimeDep, credentials: Credentials) -> Principal:
     if credentials is None:
         raise HTTPException(
-            401, "Sign in first.", headers={"WWW-Authenticate": "Bearer"}
+            401,
+            "Please choose a profile to continue.",
+            headers={"WWW-Authenticate": "Bearer"},
         )
     try:
         return runtime.signer.verify(credentials.credentials)
     except InvalidTokenError as exc:
         raise HTTPException(
-            401, "Invalid or expired token.", headers={"WWW-Authenticate": "Bearer"}
+            401,
+            "Your session has ended. Please choose a profile again.",
+            headers={"WWW-Authenticate": "Bearer"},
         ) from exc
 
 
@@ -61,7 +65,7 @@ def install_error_handlers(app: FastAPI) -> None:
         return body(
             404,
             "not_found",
-            f"No participant matches {exc.ref!r}.",
+            f"We couldn't find a patient matching {exc.ref!r}.",
             suggestions=exc.suggestions,
         )
 
@@ -70,7 +74,7 @@ def install_error_handlers(app: FastAPI) -> None:
         return body(
             409,
             "ambiguous",
-            f"{exc.ref!r} matches several participants.",
+            f"{exc.ref!r} matches more than one patient.",
             candidates=exc.candidates,
         )
 

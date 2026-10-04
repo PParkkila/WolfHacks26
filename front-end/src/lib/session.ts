@@ -9,7 +9,7 @@ export type Session = {
   expiresAt: number
 }
 
-const STORAGE_KEY = "pulsecast:session"
+const STORAGE_KEY = "gluco:session"
 
 type Listener = () => void
 

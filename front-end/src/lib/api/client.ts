@@ -27,11 +27,29 @@ export class ApiError extends Error {
       typeof record.detail === "string"
         ? record.detail
         : status === 0
-          ? "Can't reach the Gluco API."
-          : `Request failed (${status}).`
+          ? OFFLINE_MESSAGE
+          : GENERIC_MESSAGE
     const code = typeof record.code === "string" ? record.code : undefined
     return new ApiError(status, code, message, body)
   }
+}
+
+export const OFFLINE_MESSAGE = "Can't connect to Gluco right now."
+const GENERIC_MESSAGE = "Something went wrong. Please try again."
+
+const CODE_MESSAGES: Record<string, string> = {
+  not_found: "We couldn't find what you were looking for.",
+  ambiguous: "More than one result matched. Please be more specific.",
+  not_permitted: "You don't have access to that.",
+  bad_query: "That request couldn't be completed. Please try something different.",
+}
+
+/** Plain-language text for any error, so raw server or network messages never reach the screen. */
+export function friendlyError(error: unknown): string {
+  if (!(error instanceof ApiError)) return GENERIC_MESSAGE
+  if (error.status === 0) return OFFLINE_MESSAGE
+  if (error.code && CODE_MESSAGES[error.code]) return CODE_MESSAGES[error.code]
+  return error.status >= 500 ? GENERIC_MESSAGE : error.message
 }
 
 export function authHeader(): Record<string, string> {
@@ -39,7 +57,7 @@ export function authHeader(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
-/** An expired or rejected token signs the persona out; the app shell sends them to the picker. */
+/** An expired or rejected token signs the user out; the app shell sends them to the picker. */
 export function handleUnauthorized(status: number) {
   if (status === 401 && sessionStore.get()) sessionStore.set(null)
 }
@@ -68,7 +86,7 @@ export async function unwrap<T>(call: Promise<Result<T>>): Promise<T> {
   try {
     result = await call
   } catch (cause) {
-    throw new ApiError(0, undefined, "Can't reach the Gluco API.", cause)
+    throw new ApiError(0, undefined, OFFLINE_MESSAGE, cause)
   }
   if (!result.response.ok || result.error !== undefined) {
     throw ApiError.from(result.response.status, result.error)

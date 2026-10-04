@@ -45,7 +45,7 @@ export function EstimateNote({
       </Tooltip>
       {audience === "patient"
         ? "Your Gluco Score is an estimate from your wearable, not a medical diagnosis."
-        : "Gluco Score is a model estimate, not a glucose reading or a diagnosis."}
+        : "The Gluco Score is a model estimate. It is not a glucose measurement or a diagnosis."}
     </p>
   )
 }

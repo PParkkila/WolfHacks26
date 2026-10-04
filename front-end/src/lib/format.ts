@@ -53,3 +53,12 @@ export function formatGap(
   if (hours < 48) return `${hours} h earlier`
   return `${Math.round(hours / 24)} days earlier`
 }
+
+/** 1 -> "1st", 22 -> "22nd", 13 -> "13th". */
+export function ordinal(n: number): string {
+  const value = Math.round(n)
+  const mod100 = value % 100
+  if (mod100 >= 11 && mod100 <= 13) return `${value}th`
+  const suffix = { 1: "st", 2: "nd", 3: "rd" }[value % 10] ?? "th"
+  return `${value}${suffix}`
+}

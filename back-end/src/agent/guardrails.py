@@ -47,7 +47,7 @@ Classify a clinician's message to a wearable-sensor screening tool.
 Answer with the single best category.""",
     declines={
         "diagnosis": (
-            "I can't diagnose anyone. I can show each participant's Gluco Score, "
+            "I can't diagnose anyone. I can show each patient's Gluco Score, "
             "how it has changed and which wearable signals moved with it, to help "
             "decide who needs follow-up testing."
         ),
@@ -56,9 +56,9 @@ Answer with the single best category.""",
             "suggests and who may need a clinical follow-up."
         ),
         "identification": (
-            "I only work with de-identified participant ids and can't identify "
+            "I only work with de-identified patient ids and can't identify "
             "anyone. I can show their Gluco Score, trends and how they compare "
-            "with the cohort."
+            "with the rest of your panel."
         ),
     },
     fallback="diagnosis",
@@ -79,9 +79,10 @@ Classify a message a person sent to the assistant in their own wearable-health a
 Answer with the single best category.""",
     declines={
         "diagnosis": (
-            "I can't tell whether you have a medical condition. Your Gluco Score is "
-            "an estimate from your wearable, not a diagnosis, and your care team can "
-            "arrange proper tests. I'm happy to walk you through what your data shows."
+            "I can't tell you whether you have a medical condition. Your Gluco "
+            "Score is an estimate from your wearable, not a diagnosis, and your "
+            "care team can arrange proper tests. I'm happy to walk you through "
+            "what your data shows."
         ),
         "treatment": (
             "I can't recommend medication, supplements or specific diets; your care "

@@ -231,6 +231,7 @@ export function QueryChart({
   showTitles = true,
   height = 200,
   audience = "clinician",
+  hideNote = false,
   className,
 }: {
   result: QueryResult
@@ -239,6 +240,8 @@ export function QueryChart({
   showTitles?: boolean
   height?: number
   audience?: Audience
+  /** Skip the estimate note when the surrounding view already shows it. */
+  hideNote?: boolean
   className?: string
 }) {
   const panels = result.metrics
@@ -257,7 +260,7 @@ export function QueryChart({
           </EmptyMedia>
           <EmptyTitle>No readings yet</EmptyTitle>
           <EmptyDescription>
-            Nothing was recorded in this period up to now.
+            Nothing was recorded for this period yet.
           </EmptyDescription>
         </EmptyHeader>
       </Empty>
@@ -300,15 +303,15 @@ export function QueryChart({
       <figcaption className="flex flex-col gap-1">
         {result.truncated ? (
           <span className="text-xs text-muted-foreground">
-            Showing {result.series.length} of {result.total_series} series.
+            Showing {result.series.length} of {result.total_series} results.
           </span>
         ) : null}
         {snapshot && result.as_of ? (
           <span className="text-xs text-muted-foreground">
-            Snapshot as of {formatReplayTime(result.as_of)} UTC
+            Data as of {formatReplayTime(result.as_of)} UTC
           </span>
         ) : null}
-        {result.metrics.includes(GLUCO_SCORE) ? (
+        {!hideNote && result.metrics.includes(GLUCO_SCORE) ? (
           <EstimateNote audience={audience} />
         ) : null}
       </figcaption>

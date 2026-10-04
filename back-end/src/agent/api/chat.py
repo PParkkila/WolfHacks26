@@ -37,7 +37,7 @@ async def thread(
     session_id: SessionId, runtime: RuntimeDep, principal: CurrentPrincipal
 ) -> list[ChatMessage]:
     if not runtime.sessions.owns(principal.user_id, session_id):
-        raise HTTPException(404, "No such conversation.")
+        raise HTTPException(404, "We couldn't find that conversation.")
     return await runtime.sessions.messages(principal.user_id, session_id)
 
 

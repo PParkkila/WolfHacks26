@@ -1,0 +1,71 @@
+{
+  "voice": "af_heart",
+  "speed": 1.08,
+  "lines": [
+    {
+      "id": "intro",
+      "text": "Meet Gluco. It turns wearable data into a simple daily score, for people at risk of diabetes, and for their care team."
+    },
+    {
+      "id": "panel",
+      "text": "A clinician sees the whole panel: pinned widgets, cohort trends, and every patient, ranked by who needs attention."
+    },
+    {
+      "id": "live",
+      "text": "Sensor data streams in live. Here we replay last night, one hour every second."
+    },
+    {
+      "id": "detail",
+      "text": "Patient thirteen's score is collapsing. And once the replay reaches the present, their heart rate, movement and skin temperature stream in every second."
+    },
+    {
+      "id": "ask",
+      "text": "So the doctor asks Gluco why, and for a heatmap."
+    },
+    {
+      "id": "pipeline",
+      "text": "The agent explains the drop from the data, then builds a widget: it designs the chart, fetches the data, runs a privacy compliance check, and binds it to a live query."
+    },
+    {
+      "id": "pin",
+      "text": "One click pins it to the dashboard."
+    },
+    {
+      "id": "ranking",
+      "text": "Suggested prompts make it faster still. The five lowest scores, ranked and pinned."
+    },
+    {
+      "id": "board",
+      "text": "Back on the panel, both new widgets are pinned, and they stay live as new data arrives."
+    },
+    {
+      "id": "switch",
+      "text": "Now, the same story from the patient's side."
+    },
+    {
+      "id": "me",
+      "text": "Patients get plain language: their score, their week, and their own live vitals. They only ever see their own data."
+    },
+    {
+      "id": "stat",
+      "text": "They can build widgets too. A heart rate tile, pinned in seconds."
+    },
+    {
+      "id": "guard",
+      "text": "And when a question needs a doctor, Gluco says so, instead of guessing."
+    },
+    {
+      "id": "outro",
+      "text": "Gluco. Your wearable, explained."
+    }
+  ],
+  "endCard": {
+    "title": "Gluco",
+    "tagline": "Your wearable, explained.",
+    "lines": [
+      "Built at WolfHacks 2026",
+      "Next.js \u00b7 FastAPI \u00b7 OpenAI Agents SDK \u00b7 Gemini \u00b7 TimescaleDB",
+      "github.com/PParkkila/WolfHacks26"
+    ]
+  }
+}

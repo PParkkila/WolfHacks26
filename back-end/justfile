@@ -1,0 +1,32 @@
+# Run `just` to list targets. All commands assume the project .venv is active
+# (source .venv/bin/activate) and go through uv.
+
+default:
+    @just --list
+
+# Run the API with the configured DATA_BACKEND
+run:
+    uv run agent serve
+
+# Run the API against the seeded mock data, whatever .env says
+mock:
+    DATA_BACKEND=mock uv run agent serve
+
+# One question in the terminal (no server): just ask "Who needs follow-up?"
+# As a patient: just ask "Why did my score drop?" 13
+ask question who="clinician":
+    uv run agent ask --as "{{who}}" "{{question}}"
+
+# Run the eval set (calls the real model): just eval, or just eval --tier 2
+eval *args:
+    uv run python evals/run.py {{args}}
+
+test:
+    uv run pytest
+
+# Read-only checks against the real database configured in .env
+test-live:
+    LIVE_DB=1 uv run pytest tests/test_postgres_live.py -v
+
+lint:
+    uv run ruff check . && uv run ruff format --check . && uv run basedpyright

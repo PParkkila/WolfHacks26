@@ -1,0 +1,113 @@
+{
+  "run_name": "WolfHacks finite submission smoke test",
+  "timeout_seconds": 2400,
+  "tasks": [
+    {
+      "task_key": "prepare_history",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Shared/WolfHacks26/databricks/tiger/demo_smoke_test",
+        "base_parameters": {
+          "mode": "prepare",
+          "start_offset": "11520",
+          "end_offset": "11580"
+        }
+      }
+    },
+    {
+      "task_key": "emit_hour_one",
+      "depends_on": [
+        {
+          "task_key": "prepare_history"
+        }
+      ],
+      "notebook_task": {
+        "notebook_path": "/Workspace/Shared/WolfHacks26/databricks/tiger/demo_smoke_test",
+        "base_parameters": {
+          "mode": "emit",
+          "start_offset": "11520",
+          "end_offset": "11580"
+        }
+      }
+    },
+    {
+      "task_key": "bronze_hour_one",
+      "depends_on": [
+        {
+          "task_key": "emit_hour_one"
+        }
+      ],
+      "notebook_task": {
+        "notebook_path": "/Workspace/Shared/WolfHacks26/databricks/tiger/tiger_to_bronze",
+        "base_parameters": {
+          "tiger_host": "REPLACE_WITH_TIGER_HOST",
+          "tiger_port": "5432",
+          "lookback_minutes": "60"
+        }
+      }
+    },
+    {
+      "task_key": "dashboard_hour_one",
+      "depends_on": [
+        {
+          "task_key": "bronze_hour_one"
+        }
+      ],
+      "notebook_task": {
+        "notebook_path": "/Workspace/Shared/WolfHacks26/databricks/tiger/demo_smoke_test",
+        "base_parameters": {
+          "mode": "refresh",
+          "start_offset": "11520",
+          "end_offset": "11580"
+        }
+      }
+    },
+    {
+      "task_key": "emit_hour_two",
+      "depends_on": [
+        {
+          "task_key": "dashboard_hour_one"
+        }
+      ],
+      "notebook_task": {
+        "notebook_path": "/Workspace/Shared/WolfHacks26/databricks/tiger/demo_smoke_test",
+        "base_parameters": {
+          "mode": "emit",
+          "start_offset": "11580",
+          "end_offset": "11640"
+        }
+      }
+    },
+    {
+      "task_key": "bronze_hour_two",
+      "depends_on": [
+        {
+          "task_key": "emit_hour_two"
+        }
+      ],
+      "notebook_task": {
+        "notebook_path": "/Workspace/Shared/WolfHacks26/databricks/tiger/tiger_to_bronze",
+        "base_parameters": {
+          "tiger_host": "REPLACE_WITH_TIGER_HOST",
+          "tiger_port": "5432",
+          "lookback_minutes": "60"
+        }
+      }
+    },
+    {
+      "task_key": "dashboard_hour_two",
+      "depends_on": [
+        {
+          "task_key": "bronze_hour_two"
+        }
+      ],
+      "notebook_task": {
+        "notebook_path": "/Workspace/Shared/WolfHacks26/databricks/tiger/demo_smoke_test",
+        "base_parameters": {
+          "mode": "refresh",
+          "start_offset": "11580",
+          "end_offset": "11640"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,329 @@
+import json
+from types import SimpleNamespace
+
+import pytest
+from agents import (
+    GuardrailFunctionOutput,
+    InputGuardrailResult,
+    InputGuardrailTripwireTriggered,
+    MaxTurnsExceeded,
+    RawResponsesStreamEvent,
+    RunItemStreamEvent,
+)
+
+from agent.api.chat_service import MAX_TURNS_REPLY, ChatService
+from agent.api.sse import StreamTranslator
+from agent.auth import CLINICIAN, patient
+from agent.guardrails import POLICIES, GuardrailVerdict, build_input_guardrails
+from agent.observability.trace import JsonlTracer, NullTracer
+
+
+def delta(text: str) -> RawResponsesStreamEvent:
+    return RawResponsesStreamEvent(
+        data=SimpleNamespace(type="response.output_text.delta", delta=text)
+    )
+
+
+def called(name: str, args: dict, call_id: str = "c1") -> RunItemStreamEvent:
+    raw = {"name": name, "arguments": json.dumps(args), "call_id": call_id}
+    return RunItemStreamEvent(name="tool_called", item=SimpleNamespace(raw_item=raw))
+
+
+def returned(output, call_id: str = "c1") -> RunItemStreamEvent:
+    item = SimpleNamespace(raw_item={"call_id": call_id}, output=output)
+    return RunItemStreamEvent(name="tool_output", item=item)
+
+
+def test_translator_maps_the_five_event_kinds():
+    t = StreamTranslator()
+    assert t.translate(delta("hi"))[0].data == {"text": "hi"}
+    start = t.translate(called("get_participant", {"person_id": "P012"}))[0]
+    assert (start.name, start.data) == (
+        "tool_start",
+        {"call_id": "c1", "tool": "get_participant", "args": {"person_id": "P012"}},
+    )
+    end = t.translate(returned({"summary": "Patient 012: Gluco Score 40", "rows": 1}))[
+        0
+    ]
+    assert (end.name, end.data) == (
+        "tool_end",
+        {
+            "call_id": "c1",
+            "tool": "get_participant",
+            "summary": "Patient 012: Gluco Score 40",
+            "rows": 1,
+        },
+    )
+
+
+def test_translator_handles_error_payloads_and_noise():
+    t = StreamTranslator()
+    t.translate(called("explain_change", {}))
+    end = t.translate(returned({"error": "not found", "rows": 0}))[0]
+    assert end.data["summary"] == "not found"
+    assert end.data["rows"] == 0
+    assert t.translate(returned("raw text", call_id="zzz"))[0].data["tool"] == "unknown"
+    other = RawResponsesStreamEvent(data=SimpleNamespace(type="response.created"))
+    assert t.translate(other) == []
+
+
+class FakeResult:
+    def __init__(self, events=(), raises: Exception | None = None):
+        self._events, self._raises = list(events), raises
+
+    async def stream_events(self):
+        for event in self._events:
+            yield event
+        if self._raises:
+            raise self._raises
+
+
+class FakeSessions:
+    def __init__(self) -> None:
+        self.touched: list[tuple[str, str, str]] = []
+
+    def touch(self, user_id: str, session_id: str, message: str) -> None:
+        self.touched.append((user_id, session_id, message))
+
+    def open(self, user_id: str, session_id: str) -> None:
+        return None
+
+
+def service(result: FakeResult, tracer=None, sessions=None) -> ChatService:
+    return ChatService(
+        agents=lambda principal: None,  # type: ignore[arg-type,return-value]
+        sessions=sessions or FakeSessions(),  # type: ignore[arg-type]
+        tracer=tracer or NullTracer(),
+        max_turns=6,
+        run_streamed=lambda *a, **k: result,
+    )
+
+
+async def collect(svc: ChatService, principal=CLINICIAN):
+    return [e async for e in svc.stream(principal, "s1", "hello")]
+
+
+async def test_stream_happy_path_ends_with_done():
+    events = await collect(
+        service(
+            FakeResult(
+                [called("t", {}), returned({"summary": "s", "rows": 2}), delta("ok")]
+            )
+        )
+    )
+    assert [e.name for e in events] == ["tool_start", "tool_end", "token", "done"]
+    assert events[-1].data == {"session_id": "s1"}
+
+
+def trip(category: str, role="clinician") -> InputGuardrailTripwireTriggered:
+    guardrail = build_input_guardrails("m", role)[0]
+    out = GuardrailFunctionOutput(
+        output_info=GuardrailVerdict(category=category),  # type: ignore[arg-type]
+        tripwire_triggered=True,
+    )
+    return InputGuardrailTripwireTriggered(
+        InputGuardrailResult(guardrail=guardrail, output=out)
+    )
+
+
+async def test_guardrail_trip_is_a_normal_reply_not_an_error():
+    events = await collect(service(FakeResult(raises=trip("treatment"))))
+    assert [e.name for e in events] == ["token", "done"]
+    assert events[0].data["text"] == POLICIES["clinician"].declines["treatment"]
+
+
+async def test_patient_decline_uses_the_patient_wording():
+    me = patient("demo:big_ideas:013")
+    events = await collect(
+        service(FakeResult(raises=trip("other_people", "patient"))), me
+    )
+    assert events[0].data["text"] == POLICIES["patient"].declines["other_people"]
+
+
+async def test_turns_are_recorded_under_the_signed_in_user():
+    sessions = FakeSessions()
+    await collect(service(FakeResult([delta("ok")]), sessions=sessions))
+    assert sessions.touched == [("clinician:demo", "s1", "hello")]
+
+
+async def test_max_turns_gives_plain_apology():
+    events = await collect(
+        service(FakeResult([delta("partial")], raises=MaxTurnsExceeded("too many")))
+    )
+    assert [e.name for e in events] == ["token", "token", "done"]
+    assert events[1].data["text"] == MAX_TURNS_REPLY
+
+
+async def test_unexpected_exception_becomes_error_event_and_stream_closes():
+    events = await collect(service(FakeResult(raises=RuntimeError("db down"))))
+    assert [e.name for e in events] == ["error", "done"]
+    assert events[0].data == {
+        "message": "Something went wrong answering that.",
+        "recoverable": True,
+    }
+    assert "db down" not in json.dumps(events[0].data)
+
+
+async def test_jsonl_trace_records_the_turn(tmp_path):
+    path = tmp_path / "t.jsonl"
+    fake = FakeResult(
+        [
+            called("get_participant", {"person_id": "P1"}),
+            returned({"summary": "s", "rows": 1}),
+            delta("answer"),
+        ]
+    )
+    await collect(service(fake, JsonlTracer(path)))
+    line = json.loads(path.read_text().splitlines()[0])
+    assert line["message"] == "hello"
+    assert line["answer"] == "answer"
+    assert line["outcome"] == "ok"
+    assert line["tool_calls"][0]["tool"] == "get_participant"
+    assert line["tool_calls"][0]["rows"] == 1
+    assert isinstance(line["latency_ms"], int)
+
+
+@pytest.mark.parametrize("role", ["clinician", "patient"])
+def test_every_role_blocks_diagnosis_and_has_a_fallback(role):
+    policy = POLICIES[role]
+    assert policy.declines["diagnosis"]
+    assert policy.fallback in policy.declines
+
+
+def test_patients_may_ask_for_wellness_ideas_but_not_about_others():
+    assert "other_people" in POLICIES["patient"].declines
+    assert "none" not in POLICIES["patient"].declines
+    assert "general everyday wellness" in POLICIES["patient"].instructions
+
+
+def test_tool_output_with_a_chart_also_emits_a_data_event():
+    t = StreamTranslator()
+    t.translate(called("get_my_trend", {}, call_id="c9"))
+    chart = {"series": [{"participant_id": "p", "points": [{"t": "x", "v": 1}]}]}
+    events = t.translate(returned({"summary": "s", "rows": 1, "chart": chart}, "c9"))
+    assert [e.name for e in events] == ["tool_end", "data"]
+    assert events[1].data == {"call_id": "c9", "tool": "get_my_trend", "chart": chart}
+
+
+def test_translator_accepts_genuine_sdk_items():
+    from agents import Agent
+    from agents.items import ToolCallItem, ToolCallOutputItem
+    from openai.types.responses import ResponseFunctionToolCall, ResponseTextDeltaEvent
+
+    sdk_agent = Agent(name="x")
+    call = ResponseFunctionToolCall(
+        type="function_call",
+        name="get_participant",
+        call_id="call_1",
+        arguments='{"person_id": "P012"}',
+    )
+    output = ToolCallOutputItem(
+        agent=sdk_agent,
+        raw_item={"type": "function_call_output", "call_id": "call_1", "output": "{}"},
+        output={"summary": "s", "rows": 3},
+    )
+    text = ResponseTextDeltaEvent(
+        type="response.output_text.delta",
+        delta="hi",
+        item_id="i",
+        output_index=0,
+        content_index=0,
+        sequence_number=1,
+        logprobs=[],
+    )
+    t = StreamTranslator()
+    assert t.translate(RawResponsesStreamEvent(data=text))[0].data == {"text": "hi"}
+    start = t.translate(
+        RunItemStreamEvent(
+            name="tool_called", item=ToolCallItem(agent=sdk_agent, raw_item=call)
+        )
+    )[0]
+    assert start.data == {
+        "call_id": "call_1",
+        "tool": "get_participant",
+        "args": {"person_id": "P012"},
+    }
+    end = t.translate(RunItemStreamEvent(name="tool_output", item=output))[0]
+    assert end.data == {
+        "call_id": "call_1",
+        "tool": "get_participant",
+        "summary": "s",
+        "rows": 3,
+    }
+
+
+def test_parallel_calls_to_one_tool_pair_by_call_id_even_out_of_order():
+    t = StreamTranslator()
+    t.translate(called("compare_to_cohort", {"person_id": "P012"}, call_id="a"))
+    t.translate(called("compare_to_cohort", {"person_id": "P003"}, call_id="b"))
+    second = t.translate(returned({"summary": "P003", "rows": 1}, call_id="b"))[0]
+    first = t.translate(returned({"summary": "P012", "rows": 1}, call_id="a"))[0]
+    assert (second.data["call_id"], second.data["summary"]) == ("b", "P003")
+    assert (first.data["call_id"], first.data["summary"]) == ("a", "P012")
+
+
+def test_missing_call_id_is_generated_and_paired_oldest_first():
+    t = StreamTranslator()
+    start = t.translate(
+        RunItemStreamEvent(
+            name="tool_called",
+            item=SimpleNamespace(
+                raw_item={"name": "explain_change", "arguments": "{}"}
+            ),
+        )
+    )[0]
+    assert start.data["call_id"] == "call-1"
+    end = t.translate(
+        RunItemStreamEvent(
+            name="tool_output",
+            item=SimpleNamespace(raw_item={}, output={"summary": "s", "rows": 1}),
+        )
+    )[0]
+    assert (end.data["call_id"], end.data["tool"]) == ("call-1", "explain_change")
+
+
+async def test_trace_keeps_parallel_same_tool_calls_apart(tmp_path):
+    path = tmp_path / "t.jsonl"
+    fake = FakeResult(
+        [
+            called("compare_to_cohort", {"person_id": "P012"}, call_id="a"),
+            called("compare_to_cohort", {"person_id": "P003"}, call_id="b"),
+            returned({"summary": "for-b", "rows": 2}, call_id="b"),
+            returned({"summary": "for-a", "rows": 1}, call_id="a"),
+        ]
+    )
+    await collect(service(fake, JsonlTracer(path)))
+    calls = json.loads(path.read_text().splitlines()[0])["tool_calls"]
+    by_person = {c["args"]["person_id"]: c for c in calls}
+    assert (by_person["P012"]["summary"], by_person["P012"]["rows"]) == ("for-a", 1)
+    assert (by_person["P003"]["summary"], by_person["P003"]["rows"]) == ("for-b", 2)
+
+
+async def test_grounded_answer_leaves_done_unchanged_and_ungrounded_is_flagged(
+    tmp_path,
+):
+    path = tmp_path / "t.jsonl"
+    grounded = FakeResult(
+        [called("t", {}), returned({"summary": "score 0.87", "rows": 1}), delta("87%")]
+    )
+    events = await collect(service(grounded, JsonlTracer(path)))
+    assert events[-1].data == {"session_id": "s1"}
+
+    invented = FakeResult(
+        [called("t", {}), returned({"summary": "score 0.87", "rows": 1}), delta("93%")]
+    )
+    events = await collect(service(invented, JsonlTracer(path)))
+    assert [e.name for e in events] == ["tool_start", "tool_end", "token", "done"]
+    assert events[-1].data == {"session_id": "s1", "ungrounded_numbers": ["93"]}
+    first, second = (json.loads(line) for line in path.read_text().splitlines())
+    assert first["ungrounded_numbers"] == []
+    assert second["ungrounded_numbers"] == ["93"]
+
+
+def test_sse_frame_is_the_only_place_that_knows_the_wire_shape():
+    from agent.api.sse import sse_frame
+    from agent.domain.events import SseEvent
+
+    frame = sse_frame(SseEvent("token", {"text": "hi"}))
+    assert frame["event"] == "token"
+    assert json.loads(frame["data"]) == {"type": "token", "text": "hi"}

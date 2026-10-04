@@ -1,0 +1,29 @@
+{
+  "name": "WolfHacks Subject Models to Tiger",
+  "max_concurrent_runs": 1,
+  "timeout_seconds": 3600,
+  "tasks": [
+    {
+      "task_key": "features",
+      "pipeline_task": {
+        "pipeline_id": "REPLACE_WITH_PIPELINE_ID",
+        "full_refresh": false
+      }
+    },
+    {
+      "task_key": "train",
+      "depends_on": [{"task_key": "features"}],
+      "notebook_task": {
+        "notebook_path": "/Workspace/Shared/WolfHacks26/databricks/tiger/train_subject_models"
+      }
+    },
+    {
+      "task_key": "publish",
+      "depends_on": [{"task_key": "train"}],
+      "notebook_task": {
+        "notebook_path": "/Workspace/Shared/WolfHacks26/databricks/tiger/gold_to_tiger",
+        "base_parameters": {"model_version": "{{tasks.train.values.model_version}}"}
+      }
+    }
+  ]
+}

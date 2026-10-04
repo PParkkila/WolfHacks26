@@ -1,0 +1,23 @@
+{
+  "name": "WolfHacks Tiger to Bronze",
+  "max_concurrent_runs": 1,
+  "timeout_seconds": 900,
+  "tasks": [
+    {
+      "task_key": "tiger_to_bronze",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Shared/WolfHacks26/databricks/tiger/tiger_to_bronze",
+        "base_parameters": {
+          "tiger_host": "REPLACE_WITH_TIGER_HOST",
+          "tiger_port": "5432",
+          "tiger_database": "tsdb",
+          "secret_scope": "wolfhacks",
+          "user_secret_key": "tiger-user",
+          "password_secret_key": "tiger-password",
+          "target_table": "workspace.wolfhacks_bronze.sensor_events",
+          "lookback_minutes": "10"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+numpy>=1.26,<3
+pandas>=2.2,<3
+pyarrow>=17,<22
+scikit-learn==1.5.2
+remotezip==0.12.6
+pg8000>=1.31,<2

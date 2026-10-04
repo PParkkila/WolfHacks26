@@ -1,0 +1,437 @@
+{
+  "model_version": "0006be934ae7480d922f248ddd25a17d",
+  "feature_version": "wearable-24h-v1",
+  "features": [
+    "motion_mean_g",
+    "motion_p90_g",
+    "temperature_mean_c",
+    "temperature_std_c",
+    "motion_median_g",
+    "motion_std_g",
+    "motion_p99_g",
+    "temperature_p10_c",
+    "temperature_p90_c",
+    "motion_temperature_corr",
+    "motion_daily_amplitude_g",
+    "temperature_daily_amplitude_c"
+  ],
+  "training_participants": 15,
+  "real_training_windows": 660,
+  "windows_per_participant": {
+    "big_ideas:001": 44,
+    "big_ideas:002": 56,
+    "big_ideas:003": 9,
+    "big_ideas:004": 47,
+    "big_ideas:005": 58,
+    "big_ideas:006": 16,
+    "big_ideas:007": 112,
+    "big_ideas:008": 50,
+    "big_ideas:009": 36,
+    "big_ideas:010": 69,
+    "big_ideas:011": 6,
+    "big_ideas:012": 80,
+    "big_ideas:013": 18,
+    "big_ideas:014": 18,
+    "big_ideas:016": 41
+  },
+  "window_metrics_equal_participant_weight": {
+    "accuracy": 0.6041531079543877,
+    "balanced_accuracy": 0.6002903260807242,
+    "roc_auc": 0.5953154646280345,
+    "log_loss": 0.8244108694409962,
+    "brier": 0.27881218415638653
+  },
+  "baseline_window_metrics_equal_participant_weight": {
+    "accuracy": 0.5333333333333333,
+    "balanced_accuracy": 0.5,
+    "roc_auc": 0,
+    "log_loss": 0.7650841644797992,
+    "brier": 0.2857142857145143
+  },
+  "participant_mean_score_metrics": {
+    "accuracy": 0.7333333333333333,
+    "balanced_accuracy": 0.7321428571428572,
+    "roc_auc": 0.6607142857142857,
+    "log_loss": 0.716885952422503,
+    "brier": 0.2481127835650466
+  },
+  "selected_final": "forest_depth3",
+  "final_inner_scores": {
+    "prior": {
+      "balanced_accuracy": 0.5,
+      "log_loss": 0.7134663499169266
+    },
+    "logistic_c01": {
+      "balanced_accuracy": 0.6021466733102989,
+      "log_loss": 0.9422925256934326
+    },
+    "logistic_c1": {
+      "balanced_accuracy": 0.584484030354566,
+      "log_loss": 1.9735243380108527
+    },
+    "forest_depth3": {
+      "balanced_accuracy": 0.6542439409546926,
+      "log_loss": 0.6829063179483652
+    }
+  },
+  "folds": [
+    {
+      "held_out": "big_ideas:001",
+      "windows": 44,
+      "selected": "logistic_c01",
+      "inner_scores": {
+        "prior": {
+          "balanced_accuracy": 0.5,
+          "log_loss": 0.6874766832541086
+        },
+        "logistic_c01": {
+          "balanced_accuracy": 0.6185678509815011,
+          "log_loss": 0.8256748215694982
+        },
+        "logistic_c1": {
+          "balanced_accuracy": 0.5991510598881378,
+          "log_loss": 1.2164737895759945
+        },
+        "forest_depth3": {
+          "balanced_accuracy": 0.5482959692482442,
+          "log_loss": 0.7406272309787056
+        }
+      }
+    },
+    {
+      "held_out": "big_ideas:002",
+      "windows": 56,
+      "selected": "logistic_c01",
+      "inner_scores": {
+        "prior": {
+          "balanced_accuracy": 0.5,
+          "log_loss": 0.6874766832541087
+        },
+        "logistic_c01": {
+          "balanced_accuracy": 0.7100978467874112,
+          "log_loss": 0.6205301198424981
+        },
+        "logistic_c1": {
+          "balanced_accuracy": 0.6700391381885635,
+          "log_loss": 1.036547133931931
+        },
+        "forest_depth3": {
+          "balanced_accuracy": 0.6436246993483157,
+          "log_loss": 0.6596498725285511
+        }
+      }
+    },
+    {
+      "held_out": "big_ideas:003",
+      "windows": 9,
+      "selected": "logistic_c01",
+      "inner_scores": {
+        "prior": {
+          "balanced_accuracy": 0.4285714285714283,
+          "log_loss": 0.7135226199392164
+        },
+        "logistic_c01": {
+          "balanced_accuracy": 0.5841481679326159,
+          "log_loss": 1.4618395349225377
+        },
+        "logistic_c1": {
+          "balanced_accuracy": 0.5522955404578165,
+          "log_loss": 2.8890668533864496
+        },
+        "forest_depth3": {
+          "balanced_accuracy": 0.5381860002731136,
+          "log_loss": 0.8945794302800019
+        }
+      }
+    },
+    {
+      "held_out": "big_ideas:004",
+      "windows": 47,
+      "selected": "logistic_c01",
+      "inner_scores": {
+        "prior": {
+          "balanced_accuracy": 0.4285714285714284,
+          "log_loss": 0.7135226199392164
+        },
+        "logistic_c01": {
+          "balanced_accuracy": 0.6525530207240531,
+          "log_loss": 0.9328317589771188
+        },
+        "logistic_c1": {
+          "balanced_accuracy": 0.5845031341027379,
+          "log_loss": 1.7070183031110866
+        },
+        "forest_depth3": {
+          "balanced_accuracy": 0.5436477374896124,
+          "log_loss": 0.7335944785282578
+        }
+      }
+    },
+    {
+      "held_out": "big_ideas:005",
+      "windows": 58,
+      "selected": "forest_depth3",
+      "inner_scores": {
+        "prior": {
+          "balanced_accuracy": 0.42857142857142794,
+          "log_loss": 0.7135226199392166
+        },
+        "logistic_c01": {
+          "balanced_accuracy": 0.5386758010669159,
+          "log_loss": 1.3548087771925472
+        },
+        "logistic_c1": {
+          "balanced_accuracy": 0.5425646899558049,
+          "log_loss": 2.477340637028955
+        },
+        "forest_depth3": {
+          "balanced_accuracy": 0.5644577442789834,
+          "log_loss": 0.7118550808616848
+        }
+      }
+    },
+    {
+      "held_out": "big_ideas:006",
+      "windows": 16,
+      "selected": "forest_depth3",
+      "inner_scores": {
+        "prior": {
+          "balanced_accuracy": 0.42857142857142894,
+          "log_loss": 0.7135226199392163
+        },
+        "logistic_c01": {
+          "balanced_accuracy": 0.5545658320345082,
+          "log_loss": 1.4081581425571004
+        },
+        "logistic_c1": {
+          "balanced_accuracy": 0.5417632962275817,
+          "log_loss": 2.5350986963691415
+        },
+        "forest_depth3": {
+          "balanced_accuracy": 0.5955019456103734,
+          "log_loss": 0.6954991795088359
+        }
+      }
+    },
+    {
+      "held_out": "big_ideas:007",
+      "windows": 112,
+      "selected": "logistic_c01",
+      "inner_scores": {
+        "prior": {
+          "balanced_accuracy": 0.5,
+          "log_loss": 0.6874766832541086
+        },
+        "logistic_c01": {
+          "balanced_accuracy": 0.6366574911631039,
+          "log_loss": 0.7829337865338625
+        },
+        "logistic_c1": {
+          "balanced_accuracy": 0.5993334297767996,
+          "log_loss": 1.1463100358574543
+        },
+        "forest_depth3": {
+          "balanced_accuracy": 0.5120239762572384,
+          "log_loss": 0.8073198936829051
+        }
+      }
+    },
+    {
+      "held_out": "big_ideas:008",
+      "windows": 50,
+      "selected": "logistic_c01",
+      "inner_scores": {
+        "prior": {
+          "balanced_accuracy": 0.5,
+          "log_loss": 0.6874766832541086
+        },
+        "logistic_c01": {
+          "balanced_accuracy": 0.6229285860772802,
+          "log_loss": 0.7611557737193987
+        },
+        "logistic_c1": {
+          "balanced_accuracy": 0.5887534847668726,
+          "log_loss": 1.36217751045317
+        },
+        "forest_depth3": {
+          "balanced_accuracy": 0.5115447373699251,
+          "log_loss": 0.7981205633726263
+        }
+      }
+    },
+    {
+      "held_out": "big_ideas:009",
+      "windows": 36,
+      "selected": "forest_depth3",
+      "inner_scores": {
+        "prior": {
+          "balanced_accuracy": 0.42857142857142905,
+          "log_loss": 0.7135226199392165
+        },
+        "logistic_c01": {
+          "balanced_accuracy": 0.52955420560946,
+          "log_loss": 1.3153597936581884
+        },
+        "logistic_c1": {
+          "balanced_accuracy": 0.5254278684544937,
+          "log_loss": 2.3523807040863423
+        },
+        "forest_depth3": {
+          "balanced_accuracy": 0.5314947113660538,
+          "log_loss": 0.7430957852445536
+        }
+      }
+    },
+    {
+      "held_out": "big_ideas:010",
+      "windows": 69,
+      "selected": "forest_depth3",
+      "inner_scores": {
+        "prior": {
+          "balanced_accuracy": 0.42857142857142827,
+          "log_loss": 0.7135226199392165
+        },
+        "logistic_c01": {
+          "balanced_accuracy": 0.5766472785561452,
+          "log_loss": 1.4796264549764397
+        },
+        "logistic_c1": {
+          "balanced_accuracy": 0.5479463441593979,
+          "log_loss": 2.6392001596894707
+        },
+        "forest_depth3": {
+          "balanced_accuracy": 0.5977425735184355,
+          "log_loss": 0.7406836863634272
+        }
+      }
+    },
+    {
+      "held_out": "big_ideas:011",
+      "windows": 6,
+      "selected": "forest_depth3",
+      "inner_scores": {
+        "prior": {
+          "balanced_accuracy": 0.42857142857142794,
+          "log_loss": 0.7135226199392164
+        },
+        "logistic_c01": {
+          "balanced_accuracy": 0.5938792973248508,
+          "log_loss": 1.3250665473243073
+        },
+        "logistic_c1": {
+          "balanced_accuracy": 0.5494617376866644,
+          "log_loss": 2.2001651396207955
+        },
+        "forest_depth3": {
+          "balanced_accuracy": 0.6104748221127534,
+          "log_loss": 0.9147986987015145
+        }
+      }
+    },
+    {
+      "held_out": "big_ideas:012",
+      "windows": 80,
+      "selected": "logistic_c01",
+      "inner_scores": {
+        "prior": {
+          "balanced_accuracy": 0.5,
+          "log_loss": 0.6874766832541086
+        },
+        "logistic_c01": {
+          "balanced_accuracy": 0.5912737863232087,
+          "log_loss": 0.894804402697719
+        },
+        "logistic_c1": {
+          "balanced_accuracy": 0.5641650885669767,
+          "log_loss": 1.3282737043810653
+        },
+        "forest_depth3": {
+          "balanced_accuracy": 0.46869190282652573,
+          "log_loss": 0.8783621831112235
+        }
+      }
+    },
+    {
+      "held_out": "big_ideas:013",
+      "windows": 18,
+      "selected": "logistic_c01",
+      "inner_scores": {
+        "prior": {
+          "balanced_accuracy": 0.4285714285714282,
+          "log_loss": 0.7135226199392163
+        },
+        "logistic_c01": {
+          "balanced_accuracy": 0.5932914437184618,
+          "log_loss": 1.280149670584486
+        },
+        "logistic_c1": {
+          "balanced_accuracy": 0.49260957801865857,
+          "log_loss": 1.9518977219273967
+        },
+        "forest_depth3": {
+          "balanced_accuracy": 0.5416855204896003,
+          "log_loss": 0.8686703380547313
+        }
+      }
+    },
+    {
+      "held_out": "big_ideas:014",
+      "windows": 18,
+      "selected": "logistic_c01",
+      "inner_scores": {
+        "prior": {
+          "balanced_accuracy": 0.5,
+          "log_loss": 0.6874766832541085
+        },
+        "logistic_c01": {
+          "balanced_accuracy": 0.5757724307307729,
+          "log_loss": 1.3230255049158917
+        },
+        "logistic_c1": {
+          "balanced_accuracy": 0.5372814435733645,
+          "log_loss": 2.6130052056875126
+        },
+        "forest_depth3": {
+          "balanced_accuracy": 0.46979086721520213,
+          "log_loss": 0.8599523630520638
+        }
+      }
+    },
+    {
+      "held_out": "big_ideas:016",
+      "windows": 41,
+      "selected": "logistic_c01",
+      "inner_scores": {
+        "prior": {
+          "balanced_accuracy": 0.5,
+          "log_loss": 0.6874766832541086
+        },
+        "logistic_c01": {
+          "balanced_accuracy": 0.5263892111747656,
+          "log_loss": 1.1600920447511958
+        },
+        "logistic_c1": {
+          "balanced_accuracy": 0.48436692476224696,
+          "log_loss": 2.08887948908341
+        },
+        "forest_depth3": {
+          "balanced_accuracy": 0.4340075353641375,
+          "log_loss": 0.9374609257580696
+        }
+      }
+    }
+  ],
+  "exclusions": {
+    "big_ideas:015": "Previously approved exclusion: wearable/CGM coverage"
+  },
+  "quality_policy": ">=1152 real valid minutes per elapsed 24h; >=30 minutes in every relative hour",
+  "interpretation": "0-100 higher-HbA1c study-group resemblance, not diabetes probability or glucose",
+  "limitations": [
+    "15 independent labeled participants, not independent windows",
+    "Reused development cohort, not external validation",
+    "No synthetic/demo data used in training or evaluation",
+    "IMU50 units inferred; device transfer unvalidated",
+    "No direct HR input: HR is not available across both datasets",
+    "No clinically validated categories or action thresholds"
+  ]
+}

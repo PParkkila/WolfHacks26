@@ -1,0 +1,52 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.pypirc
+
+# Operating-system and editor files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage*
+htmlcov/
+
+# JavaScript and generated app output
+node_modules/
+.next/
+dist/
+out/
+coverage/
+
+# Local databases and runtime state
+*.sqlite
+*.sqlite3
+*.db
+*.log
+*.pid
+var/
+
+# Notebook, chart, and document build artifacts
+.ipynb_checkpoints/
+.chart-data-*/
+docs/_build/
+
+# Local research data and disposable environments
+databricks/local-data/
+databricks/.venv/
+databricks/.overnight-venv/
+databricks/tiger/pilot-data/
+pilot-data/

@@ -1,0 +1,91 @@
+[project]
+name = "agent"
+version = "0.1.0"
+description = "Read-only agentic reasoning layer for Gluco wearable risk triage"
+readme = "README.md"
+license = "AGPL-3.0-only"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.142.2",
+    "numpy>=2.5.3",
+    "openai-agents>=0.23.1",
+    "psycopg[binary]>=3.3.6",
+    "pydantic>=2.13.5",
+    "pydantic-settings>=2.15.0",
+    "pyjwt>=2.10",
+    "pyyaml>=6.0.3",
+    "sse-starlette>=3.5.0",
+    "uvicorn>=0.54.0",
+]
+
+[project.scripts]
+agent = "agent.main:main"
+
+[build-system]
+requires = ["uv_build>=0.12.21,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "basedpyright>=1.40.1",
+    "httpx>=0.28.1",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.16.10",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+src = ["src"]
+
+[tool.ruff.lint]
+select = [
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "F",     # pyflakes
+    "I",     # isort
+    "B",     # flake8-bugbear
+    "UP",    # pyupgrade
+    "SIM",   # flake8-simplify
+    "RUF",   # ruff-specific
+    "ASYNC", # flake8-async
+    "S",     # flake8-bandit
+    "T20",   # flake8-print (catch stray prints in libs)
+    "N",     # pep8-naming
+    "C4",    # flake8-comprehensions
+    "PT",    # flake8-pytest-style
+    "PTH",   # flake8-use-pathlib
+    "ERA",   # eradicate commented-out code
+]
+ignore = [
+    "S101", # assert is fine in tests
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S", "T20"]
+"**/__init__.py" = ["F401"]
+"**/main.py" = ["T20"]       # CLI entrypoints may print
+"evals/**" = ["T20"]         # eval runner prints its report
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.basedpyright]
+include = ["src"]
+exclude = ["**/__pycache__", ".venv"]
+pythonVersion = "3.12"
+pythonPlatform = "Linux"
+typeCheckingMode = "standard"
+venvPath = "."
+venv = ".venv"
+reportMissingImports = true
+reportMissingTypeStubs = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests"]
+asyncio_mode = "auto"

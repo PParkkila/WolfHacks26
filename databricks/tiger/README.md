@@ -35,6 +35,8 @@ time-series database for live events. Both sources meet in Databricks Bronze.
   serverless, so the home upload sends about 0.8 GB instead of 4 GB of CSVs.
 - `activity_minute_pilot.py`: read-only, one-subject acceleration/HR minute
   summary to inspect motion features and coverage before building Silver.
+- `lakeflow_activity_minute_pilot.py`: the reviewed one-subject transform as a
+  Lakeflow materialized view; still a pilot, not the full cohort pipeline.
 
 ## 1. Create the Tiger service
 
@@ -266,6 +268,21 @@ readings sharing a minute timestamp. The output shows minute coverage and
 sample rows. It only creates a temporary view, `activity_minute_pilot`; it
 does not write a Silver table or label exercise intensity. Review timestamps,
 coverage, and HR overlap before promoting this logic to Lakeflow.
+
+BIG IDEAs and IMU50 contain different people. Every feature row keeps
+`source_dataset`, `subject_id`, and a dataset-qualified `participant_key`;
+never join the two datasets on a numeric subject ID. BIG IDEAs supplies the
+glucose outcomes for training, while IMU50 is an unlabeled, out-of-cohort
+application dataset whose sensor compatibility must be checked separately.
+
+To persist the reviewed one-subject result, create a **New → ETL pipeline**
+using serverless, set its default catalog to `workspace` and schema to
+`wolfhacks_silver`, and add `lakeflow_activity_minute_pilot.py` as source code.
+Run one triggered update. It publishes
+`workspace.wolfhacks_silver.activity_minute_pilot`. The materialized-view
+function only returns a Spark DataFrame; it has no manual writes or collects.
+It still reads raw Volume files directly as a limited pilot. Add Bronze Delta
+source tables before expanding this to a production medallion pipeline.
 
 ## 7. Store Tiger credentials in Databricks Secrets
 

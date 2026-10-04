@@ -106,9 +106,13 @@ hr_minute = (
 
 activity_minute = (
     acc_minute.join(hr_minute, "minute_ts", "left")
+    .withColumn("source_dataset", F.lit("big_ideas"))
     .withColumn("subject_id", F.lit(subject_id))
+    .withColumn("participant_key", F.lit(f"big_ideas:{subject_id}"))
     .select(
+        "source_dataset",
         "subject_id",
+        "participant_key",
         "minute_ts",
         "acc_samples",
         "acc_coverage_fraction",

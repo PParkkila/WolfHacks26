@@ -31,6 +31,19 @@ for path in (acc_path, hr_path):
 E4_COUNTS_PER_G = 64.0
 EXPECTED_ACC_SAMPLES_PER_MINUTE = 32 * 60
 
+
+def source_clock_minute(timestamp_col):
+    """Truncate a source-clock TIMESTAMP_NTZ without assigning a timezone."""
+    return F.make_timestamp_ntz(
+        F.year(timestamp_col),
+        F.month(timestamp_col),
+        F.dayofmonth(timestamp_col),
+        F.hour(timestamp_col),
+        F.minute(timestamp_col),
+        F.lit(0),
+    )
+
+
 acc_csv = spark.read.option("header", True).csv(str(acc_path))
 hr_csv = spark.read.option("header", True).csv(str(hr_path))
 if len(acc_csv.columns) != 4 or len(hr_csv.columns) != 2:
@@ -39,13 +52,13 @@ if len(acc_csv.columns) != 4 or len(hr_csv.columns) != 2:
     )
 
 # Rename by position because the source headers have leading spaces and HR may
-# include a UTF-8 byte-order mark. try_to_timestamp/try_cast reject bad values
+# include a UTF-8 byte-order mark. to_timestamp_ntz/try_cast reject bad values
 # as NULL instead of silently treating text as a measurement.
 acc_csv = acc_csv.toDF("datetime_raw", "acc_x_raw", "acc_y_raw", "acc_z_raw")
 hr_csv = hr_csv.toDF("datetime_raw", "hr_raw")
 
 acc = acc_csv.select(
-    F.try_to_timestamp(
+    F.to_timestamp_ntz(
         F.col("datetime_raw"), F.lit("yyyy-MM-dd HH:mm:ss.SSSSSS")
     ).alias("event_ts"),
     F.expr("try_cast(acc_x_raw AS DOUBLE)").alias("acc_x"),
@@ -70,7 +83,7 @@ acc = acc.withColumn(
 )
 
 acc_minute = (
-    acc.withColumn("minute_ts", F.date_trunc("minute", F.col("event_ts")))
+    acc.withColumn("minute_ts", source_clock_minute(F.col("event_ts")))
     .groupBy("minute_ts")
     .agg(
         F.count("*").alias("acc_samples"),
@@ -89,14 +102,14 @@ acc_minute = (
 # HR source timestamps have minute precision, even though some minutes contain
 # multiple readings. Average within the minute; do not invent sub-minute times.
 hr = hr_csv.select(
-    F.try_to_timestamp(F.col("datetime_raw"), F.lit("M/d/yy H:mm")).alias(
+    F.to_timestamp_ntz(F.col("datetime_raw"), F.lit("M/d/yy H:mm")).alias(
         "event_ts"
     ),
     F.expr("try_cast(hr_raw AS DOUBLE)").alias("hr_bpm"),
 ).where(F.col("event_ts").isNotNull() & (F.col("hr_bpm") > 0))
 
 hr_minute = (
-    hr.withColumn("minute_ts", F.date_trunc("minute", F.col("event_ts")))
+    hr.withColumn("minute_ts", source_clock_minute(F.col("event_ts")))
     .groupBy("minute_ts")
     .agg(
         F.count("*").alias("hr_samples"),

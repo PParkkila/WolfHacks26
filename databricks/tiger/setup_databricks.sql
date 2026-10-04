@@ -1,4 +1,4 @@
--- Run in a Databricks SQL editor. Change `main` if your writable catalog has
+-- Run in a Databricks SQL editor. Change `workspace` if your writable catalog has
 -- another name.
 CREATE SCHEMA IF NOT EXISTS workspace.wolfhacks_raw;
 CREATE SCHEMA IF NOT EXISTS workspace.wolfhacks_bronze;

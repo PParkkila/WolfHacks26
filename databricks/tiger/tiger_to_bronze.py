@@ -3,7 +3,7 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install "psycopg[binary]>=3.2,<4"
+# MAGIC %pip install "pg8000>=1.31,<2"
 
 # COMMAND ----------
 
@@ -12,8 +12,11 @@ dbutils.library.restartPython()
 # COMMAND ----------
 
 from datetime import datetime, timedelta, timezone
+import re
+import ssl
+import json
 
-import psycopg
+import pg8000.native
 from pyspark.sql.types import (
     IntegerType,
     LongType,
@@ -47,6 +50,8 @@ if not tiger_host:
     raise ValueError("Set the tiger_host job parameter")
 if lookback_minutes < 1:
     raise ValueError("lookback_minutes must be at least 1")
+if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*", target_table):
+    raise ValueError("target_table must be an unquoted catalog.schema.table name")
 
 tiger_user = dbutils.secrets.get(secret_scope, user_secret_key)
 tiger_password = dbutils.secrets.get(secret_scope, password_secret_key)
@@ -96,55 +101,65 @@ select_events = """
            schema_version,
            raw_payload::text
     FROM raw.sensor_events
-    WHERE received_at >= %s
-      AND received_at < %s
+    WHERE received_at >= :start_at
+      AND received_at < :end_at
     ORDER BY received_at
 """
 
 candidate_count = 0
 batch_size = 10_000
 
-with psycopg.connect(
+connection = pg8000.native.Connection(
     host=tiger_host,
     port=tiger_port,
-    dbname=tiger_database,
+    database=tiger_database,
     user=tiger_user,
     password=tiger_password,
-    sslmode="require",
-) as connection:
-    # A named cursor streams batches instead of loading the result locally.
-    with connection.cursor(name="tiger_bronze_stream") as cursor:
-        cursor.execute(select_events, (start_at, end_at))
+    ssl_context=ssl.create_default_context(),
+    timeout=30,
+)
+try:
+    connection.run("START TRANSACTION READ ONLY")
+    connection.run(
+        "DECLARE tiger_bronze_stream NO SCROLL CURSOR FOR " + select_events,
+        start_at=start_at,
+        end_at=end_at,
+    )
 
-        while rows := cursor.fetchmany(batch_size):
-            ingested_at = datetime.now(timezone.utc).replace(tzinfo=None)
-            normalized = [
-                (
-                    spark_timestamp(row[0]),
-                    spark_timestamp(row[1]),
-                    row[2],
-                    row[3],
-                    row[4],
-                    row[5],
-                    row[6],
-                    ingested_at,
-                )
-                for row in rows
-            ]
-            incoming = spark.createDataFrame(normalized, event_schema)
-            incoming.createOrReplaceTempView("tiger_sensor_events_increment")
-            spark.sql(
-                f"""
-                MERGE INTO {target_table} AS target
-                USING tiger_sensor_events_increment AS source
-                ON target.sensor_id = source.sensor_id
-                   AND target.observed_at = source.observed_at
-                   AND target.event_id = source.event_id
-                WHEN NOT MATCHED THEN INSERT *
-                """
+    # FETCH bounds memory on the server and client; DB-API fetchmany alone
+    # would not prevent this pure-Python driver buffering the full result.
+    while rows := connection.run(f"FETCH FORWARD {batch_size} FROM tiger_bronze_stream"):
+        ingested_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        normalized = [
+            (
+                spark_timestamp(row[0]),
+                spark_timestamp(row[1]),
+                row[2],
+                row[3],
+                row[4],
+                row[5],
+                row[6],
+                ingested_at,
             )
-            candidate_count += len(rows)
-            print(f"Processed {candidate_count:,} candidate events...")
+            for row in rows
+        ]
+        incoming = spark.createDataFrame(normalized, event_schema)
+        incoming.createOrReplaceTempView("tiger_sensor_events_increment")
+        spark.sql(
+            f"""
+            MERGE INTO {target_table} AS target
+            USING tiger_sensor_events_increment AS source
+            ON target.sensor_id = source.sensor_id
+               AND target.observed_at = source.observed_at
+               AND target.event_id = source.event_id
+            WHEN NOT MATCHED THEN INSERT *
+            """
+        )
+        candidate_count += len(rows)
+        print(f"Processed {candidate_count:,} candidate events...")
+    connection.run("ROLLBACK")
+finally:
+    connection.close()
 
 start_text = start_at.isoformat()
 end_text = end_at.isoformat()
@@ -155,3 +170,10 @@ else:
         f"Finished merging {candidate_count:,} candidate events from "
         f"{start_text} through {end_text}."
     )
+
+dbutils.notebook.exit(json.dumps({
+    "candidate_events": candidate_count,
+    "target_table": target_table,
+    "start_at": start_text,
+    "end_at": end_text,
+}))

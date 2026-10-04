@@ -14,8 +14,21 @@ E4_COUNTS_PER_G = 64.0
 EXPECTED_ACC_SAMPLES_PER_MINUTE = 32 * 60
 
 
+def source_clock_minute(timestamp_col):
+    """Truncate a source-clock TIMESTAMP_NTZ without converting it to UTC."""
+    return F.make_timestamp_ntz(
+        F.year(timestamp_col),
+        F.month(timestamp_col),
+        F.dayofmonth(timestamp_col),
+        F.hour(timestamp_col),
+        F.minute(timestamp_col),
+        F.lit(0),
+    )
+
+
 @dp.materialized_view(
     name="activity_minute_pilot",
+    table_properties={"delta.feature.timestampNtz": "supported"},
     comment=(
         "BIG IDEAs 001 minute-level movement and heart rate pilot. "
         "Timestamps are source-clock values with unknown timezone, not UTC."
@@ -62,7 +75,7 @@ def activity_minute_pilot():
         "enmo_g", F.greatest(vector_g - F.lit(1.0), F.lit(0.0))
     )
     acc_minute = (
-        acc.withColumn("minute_ts", F.date_trunc("minute", F.col("event_ts")))
+        acc.withColumn("minute_ts", source_clock_minute(F.col("event_ts")))
         .groupBy("minute_ts")
         .agg(
             F.count("*").alias("acc_samples"),
@@ -88,7 +101,7 @@ def activity_minute_pilot():
         F.expr("try_cast(hr_raw AS DOUBLE)").alias("hr_bpm"),
     ).where(F.col("event_ts").isNotNull() & (F.col("hr_bpm") > 0))
     hr_minute = (
-        hr.withColumn("minute_ts", F.date_trunc("minute", F.col("event_ts")))
+        hr.withColumn("minute_ts", source_clock_minute(F.col("event_ts")))
         .groupBy("minute_ts")
         .agg(
             F.count("*").alias("hr_samples"),

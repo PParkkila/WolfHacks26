@@ -29,11 +29,14 @@ export interface DashboardWindow {
   risk_cross_device_validated?: false;
   risk_score_unit?: "index_0_100_not_clinical_probability";
   risk_change_24h_points?: number | null; // index points, not percent; null without prior-day history
-  latest_sensor_time?: string; // simulated event time, independent of the hourly risk window
+  latest_sensor_time?: string; // simulated event time, independent of the risk window
   latest_motion_g?: number;
   latest_skin_temperature_c?: number;
   latest_hr_bpm?: number | null;
   latest_sensor_is_synthetic?: boolean;
+  latest_sensor_generation_policy?: "linear_interpolation_of_demo_minute_summaries";
+  latest_sensor_source_resolution_seconds?: 60;
+  latest_sensor_update_interval_seconds?: 1;
   demo_only: true;
   training_eligible: false;
   time_basis: "simulated_event_time";
@@ -48,5 +51,5 @@ export interface DemoDashboardFixture {
   scored_windows?: number;
   risk_model_version?: string;
   latest: DashboardWindow[];
-  example_trend: DashboardWindow[]; // last 168 hourly windows for BIG IDEAs 001
+  example_trend: DashboardWindow[]; // last 7 days; mixed historical/hourly and live sub-hourly points
 }

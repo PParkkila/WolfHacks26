@@ -41,6 +41,7 @@ def save(state):
 def tasks_for(state, mode, start=11520, end=11580):
     common = {"session_id": SESSION, "fixture_id": state["fixture_id"], "replay_start": ANCHOR,
               "risk_model_version": "0006be934ae7480d922f248ddd25a17d",
+              "risk_update_minutes": "5" if time.time() >= START_AT else "15",
               "start_offset": str(start), "end_offset": str(end)}
     def notebook(key, name, params, parent=None):
         task = {"task_key": key, "notebook_task": {"notebook_path": REMOTE+name, "base_parameters": params}}
@@ -107,9 +108,9 @@ def submit(state, mode, end, deadline):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["prepare", "advance", "judge", "status", "stop", "dry-run"])
+    parser.add_argument("action", choices=["prepare", "advance", "live", "judge", "status", "stop", "dry-run"])
     parser.add_argument("--fallback", action="store_true", help="Use the proven 17-person fixture when first preparing")
-    parser.add_argument("--background", action="store_true", help="Detach the judging controller with a log and sleep prevention")
+    parser.add_argument("--background", action="store_true", help="Detach the live/judging controller with a log and sleep prevention")
     parser.add_argument("--batch-minutes", type=int, default=15)
     args = parser.parse_args()
     ROOT.mkdir(parents=True, exist_ok=True)
@@ -131,12 +132,23 @@ def main():
             api("jobs", "cancel-run", str(state["pending"]["run_id"]))
         print("Stopped new replay batches; dashboard history is preserved"); return
     if args.background:
-        if args.action != "judge" or not START_AT <= time.time() < STOP_AT:
-            raise ValueError("Background judging can only start noon–3 p.m. Eastern on Oct 4")
+        earliest = START_AT if args.action == "judge" else PREP_AT
+        if args.action not in {"live", "judge"} or not earliest <= time.time() < STOP_AT:
+            raise ValueError("Live replay starts after 8 a.m.; scheduled judging after noon; both stop at 3 p.m. Eastern Oct 4")
+        # A scheduled noon start must not duplicate an explicitly started feed.
+        with (ROOT/"controller.lock").open("a") as probe:
+            try:
+                fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                print(json.dumps({"already_running": True, "session_id": SESSION})); return
+        if not state["ready"] or (ROOT/"STOP").exists():
+            raise ValueError("Replay must be prepared and not explicitly stopped")
         with (ROOT/"controller.log").open("a") as log:
-            process = subprocess.Popen([sys.executable, "-u", str(Path(__file__).resolve()), "judge",
+            process = subprocess.Popen([sys.executable, "-u", str(Path(__file__).resolve()), args.action,
                 "--batch-minutes", str(args.batch_minutes)], stdout=log, stderr=log, start_new_session=True)
             subprocess.Popen(["/usr/bin/caffeinate", "-i", "-s", "-w", str(process.pid)], stdout=log, stderr=log, start_new_session=True)
+        (ROOT/"controller_launch.json").write_text(json.dumps({"pid": process.pid, "action": args.action,
+            "session_id": SESSION, "started_at": datetime.now(timezone.utc).isoformat()}))
         print(json.dumps({"controller_pid": process.pid, "stop_at": "2026-10-04T15:00:00-04:00"})); return
     lock = (ROOT/"controller.lock").open("a")
     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -144,12 +156,15 @@ def main():
         raise ValueError("No Databricks compute before 8 a.m. Eastern")
     if args.action == "judge" and not START_AT <= time.time() < STOP_AT:
         raise ValueError("Judging window is noon–3 p.m. Eastern on Oct 4")
+    if args.action == "live" and not PREP_AT <= time.time() < STOP_AT:
+        raise ValueError("Live replay window is 8 a.m.–3 p.m. Eastern on Oct 4")
     if not 1 <= args.batch_minutes <= 60:
         raise ValueError("batch-minutes must be 1–60")
     if (ROOT/"STOP").exists():
         raise ValueError("STOP marker is present; request an explicit resume before clearing it")
     save(state)
-    deadline = STOP_AT if args.action == "judge" else min(STOP_AT, time.time()+2400)
+    continuous = args.action in {"live", "judge"}
+    deadline = STOP_AT if continuous else min(STOP_AT, time.time()+2400)
     if state.get("pending"):
         settle(state, deadline)
     if args.action == "prepare":
@@ -160,16 +175,17 @@ def main():
         raise ValueError("Run prepare and verify it before replay")
     fixed_target = min(12960, 11520 + int((time.time()-datetime.fromisoformat(ANCHOR).timestamp()) // 60))
     while time.time() < deadline and not (ROOT/"STOP").exists():
+        cadence = min(args.batch_minutes, 5) if time.time() >= START_AT else args.batch_minutes
         target = (min(12960, 11520 + int((time.time()-datetime.fromisoformat(ANCHOR).timestamp()) // 60))
-                  if args.action == "judge" else fixed_target)
+                  if continuous else fixed_target)
         backlog = target - state["cursor"]
-        if backlog > 0 and (args.action == "advance" or backlog >= args.batch_minutes):
+        if backlog > 0 and (args.action == "advance" or backlog >= cadence):
             submit(state, "advance", state["cursor"] + min(60, backlog), deadline)
         elif args.action == "advance" or state["cursor"] >= 12960:
             break
         else:
             time.sleep(10)
-    state["status"] = "stopped" if args.action == "judge" else "ready"
+    state["status"] = "stopped" if continuous else "ready"
     save(state)
     print(json.dumps(state, indent=2))
 

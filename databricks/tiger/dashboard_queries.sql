@@ -1,5 +1,12 @@
 -- Backend-only, use a read-only Tiger role. Bind parameters instead of string interpolation.
 -- $1 = session_id: continuous-oct4-v1 (66 people); submission-smoke-v1 remains the 17-person fallback.
+-- Poll this joined view every second for sensor cards + latest slower analytics.
+SELECT payload, sensor_published_at, analytics_published_at
+FROM gold.dashboard_live
+WHERE session_id = $1
+ORDER BY participant_key;
+
+-- Analytics-only view; sensor fields here advance only with analytics publication.
 SELECT payload, published_at
 FROM gold.dashboard_latest
 WHERE session_id = $1

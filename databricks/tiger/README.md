@@ -1222,14 +1222,24 @@ databricks/.overnight-venv/bin/python databricks/tiger/continuous_demo.py advanc
 # Scheduled for noon; accepts starts only between noon and 3 p.m. on October 4.
 databricks/.overnight-venv/bin/python databricks/tiger/continuous_demo.py judge --background
 
+# Explicit manual start after 8 a.m.; continues through the same 3 p.m. stop.
+databricks/.overnight-venv/bin/python databricks/tiger/continuous_demo.py live --background
+
 databricks/.overnight-venv/bin/python databricks/tiger/continuous_demo.py status
 databricks/.overnight-venv/bin/python databricks/tiger/continuous_demo.py stop
 ```
 
-The default judging transport uses **15-minute micro-batches**. Every simulated
-minute is represented; the backend should not imply second-by-second transport.
+The analytics transport uses **15-minute micro-batches before noon Eastern,
+then five-minute micro-batches from noon to 3 p.m. on October 4**. Each completed
+analytics job recomputes rolling metrics and the trailing-24-hour risk at that
+cadence, rather than only on hourly boundaries. Processing latency is additional;
+Free Edition quotas may interrupt it. Every simulated minute is represented.
+The manual `live` command uses the same cadence and persisted session. A second
+background start (including the noon schedule) detects the existing controller
+lock and does not launch duplicate processing. Starting early uses additional
+Databricks Free Edition compute quota.
 Gaps between recording and judging are caught up in batches of at most 60 minutes.
-Risk windows update hourly. Previously calculated scores are reused under the
+Previously calculated scores are reused under the
 session's pinned model, avoiding repeated seven-day inference on every batch.
 Only successful complete runs advance the cursor. A retry uses stable event IDs.
 At 3 p.m. no new batches are launched and the controller cancels its own pending
@@ -1238,7 +1248,7 @@ run, if needed. A partial cancelled batch must be reported, not called complete.
 Latest payloads also expose `latest_sensor_time`, `latest_motion_g`,
 `latest_skin_temperature_c`, `latest_hr_bpm`, and `latest_sensor_is_synthetic`.
 Use those for current sensor cards; use `window_end` for the last completed
-hourly risk window and `published_at` for actual processing freshness. Show the
+risk window and `published_at` for actual processing freshness. Show the
 simulated-data badge and indicate a paused/stale pipeline honestly even though
 the underlying simulated timeline is continuous.
 
@@ -1249,6 +1259,38 @@ window; it does not change persistent power settings. Public-source speed and
 Databricks Free Edition quotas still limit what can be completed. The expanded
 roster's remote registration and replay are verified in the morning, not by the
 storage-only overnight upload.
+
+#### One-second sensor cards (separate from slower analytics)
+
+`fast_sensor.py` writes all 66 latest snapshots directly to Tiger every second,
+without a Databricks job per tick. It stops at 3 p.m. Eastern or when the shared
+`STOP` marker appears. The existing secret scope supplies credentials in memory;
+credentials are never written to the sensor bank, logs, or frontend.
+
+Backend **poll `gold.dashboard_live` every second**, filtering
+`session_id = 'continuous-oct4-v1'`. It joins `gold.sensor_latest` with the latest
+analytics payload. Use `sensor_published_at` and `analytics_published_at` to show
+separate freshness. Existing `dashboard_reader` SELECT access carries over to
+the new table/view; it receives no write privileges. Browser clients call the
+backend, never Tiger with database credentials. The previous
+`gold.dashboard_latest` alone does not provide the one-second sensor path.
+
+The prepared bank is minute-resolution, so the one-second motion, skin temperature,
+and available HR values are explicitly **synthetic linear interpolations**, not
+new measured samples. Missing HR remains null. Only the current 66 snapshots are
+stored at one-second cadence; canonical minute events remain the durable history
+and analytics input. The fast sender and catch-up producer share deterministic
+minute event IDs, preventing duplicates. Synthetic ticks never enter training.
+
+```bash
+databricks/.overnight-venv/bin/python databricks/tiger/fast_sensor.py --background
+```
+
+The sender needs the compact exported day at
+`databricks/local-data/continuous-demo/live_bank.jsonl`; `export_live_bank.py`
+creates the downloadable Volume file. `sensor_state.json` reports successful
+ticks and write latency; `sensor.log` reports failures without credentials.
+Both are ignored local runtime files. Keep the Mac awake and network-connected.
 
 #### Morning verification — October 4, 2026
 

@@ -34,11 +34,15 @@ for key, default in {
     "tiger_host": "hi70ycj0r6.b4t1dqdug8.tsdb.cloud.timescale.com", "tiger_port": "31994",
     "tiger_database": "tsdb", "secret_scope": "wolfhacks",
     "risk_model_version": "",
+    "risk_update_minutes": "60",
 }.items():
     dbutils.widgets.text(key, default)
 p = {key: dbutils.widgets.get(key) for key in (
     "mode", "session_id", "fixture_id", "replay_start", "start_offset", "end_offset",
-    "tiger_host", "tiger_port", "tiger_database", "secret_scope", "risk_model_version")}
+    "tiger_host", "tiger_port", "tiger_database", "secret_scope", "risk_model_version", "risk_update_minutes")}
+interval = int(p["risk_update_minutes"])
+if interval not in {5, 15, 60}:
+    raise ValueError("risk_update_minutes must be 5, 15, or 60")
 session, fixture = p["session_id"], p["fixture_id"]
 if not all(re.fullmatch(r"[a-z0-9-]{1,50}", value) for value in (session, fixture)):
     raise ValueError("Session/fixture must use lowercase letters, digits, hyphens")
@@ -223,7 +227,9 @@ def publish():
             "risk_model_version": release.model_version, "risk_status": "experimental_demo_cohort_similarity",
             "risk_model_evaluation": json.loads(release.report_json)["window_metrics_equal_participant_weight"],
             "latest": [json.loads(row[0]) for row in latest],
-            "example_trend": [r for r in records if r["participant_key"] == "demo:big_ideas:001"][-168:]}
+            "example_trend": [r for r in records if r["participant_key"] == "demo:big_ideas:001"
+                              and datetime.fromisoformat(r["window_end"]) >
+                              max(datetime.fromisoformat(x["window_end"]) for x in records) - timedelta(days=7)]}
 
 
 # The persisted session prevents reruns from silently changing the event clock.
@@ -295,7 +301,7 @@ elif p["mode"] == "refresh":
     if live.groupBy("demo_participant_key", "minute_offset").count().where("count <> 1").limit(1).count():
         raise ValueError("Duplicate minute keys in Bronze")
     merge(live.select(*minute_columns), "replay_minutes", ["session_id", "demo_participant_key", "minute_offset"])
-    score_end = (end // 60) * 60
+    score_end = (end // interval) * interval
     trailing = spark.table(f"{SCHEMA}.replay_minutes").where(
         (F.col("session_id") == session) & (F.col("minute_offset") >= score_end - 1440) & (F.col("minute_offset") < score_end))
     metrics = trailing.groupBy("fixture_id", "demo_participant_key", "source_participant_key", "source_dataset", "unit_status").agg(

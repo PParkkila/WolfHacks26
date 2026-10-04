@@ -5,6 +5,26 @@ Databricks handles ingestion, aggregation, and analytics. The backend reads the
 published results directly from Tiger; the frontend accesses them through the
 backend API.
 
+## Current live demo — October 4
+
+Active session: **`continuous-oct4-v1`**, all **66 participants**.
+The diagram below describes the slower analytics path. A separate fast path now
+writes **one-second sensor snapshots directly to `gold.sensor_latest` in Tiger**.
+The backend should poll **`gold.dashboard_live` every second**: this view joins
+the latest sensor snapshot with the most recent analytics payload.
+
+Rolling metrics and trailing-24-hour risk refresh on a **15-minute cadence until
+noon Eastern, then a five-minute cadence until the 3 p.m. stop**. Databricks
+processing adds latency. Sensor writes do not wait for those jobs. Read
+`sensor_published_at` and `analytics_published_at` separately to detect stale data.
+
+One-second values are labeled synthetic interpolations of the prepared minute
+summaries, not measured 1 Hz readings. Only latest snapshots are stored each
+second; durable history and model inputs remain canonical minute records.
+The existing `dashboard_reader` has SELECT access to both new objects, not INSERT.
+The earlier smoke-test details below are historical evidence for the separate
+17-person fallback session, not the current cohort limit.
+
 ```mermaid
 flowchart LR
     S["Sensors / demo replay"] -->|"Write events"| T1[("Tiger Data · raw<br/>raw.sensor_events")]
@@ -35,8 +55,8 @@ to the backend. A dashboard request does not trigger Databricks computation.
    `workspace.wolfhacks_bronze.sensor_events`. A lookback rereads recent events;
    the merge prevents duplicate rows.
 3. **Calculate rolling metrics and predictions.** Databricks processes sensor
-   data into minute summaries and trailing 24-hour windows, with hourly points
-   for seven-day trends. A separately trained model scores recent wearable
+   data into minute summaries and trailing 24-hour windows, with hourly historical
+   points and 15-/5-minute live points for seven-day trends. A separately trained model scores recent wearable
    patterns for resemblance to the study's higher-HbA1c group. The finite demo
    transports already-derived minute summaries, not raw
    high-frequency samples. Its replay minutes and dashboard windows live in
@@ -75,14 +95,16 @@ Training and publication both completed successfully; the finite replay stopped.
 
 | Object | Purpose |
 | --- | --- |
-| `gold.dashboard_latest` | Latest cards: one row per session and participant |
-| `gold.dashboard_windows` | Historical hourly windows for trend charts |
+| `gold.dashboard_live` | Current sensor cards joined with the latest slower analytics; poll every second |
+| `gold.sensor_latest` | Latest synthetic sensor snapshot per session and participant |
+| `gold.dashboard_latest` | Latest analytics window per session and participant |
+| `gold.dashboard_windows` | Historical hourly and live sub-hourly windows for trend charts |
 
-Both expose `session_id`, `participant_key`, `window_end`, `payload`, and
+The two analytics objects expose `session_id`, `participant_key`, `window_end`, `payload`, and
 `published_at`. The `payload` JSONB object contains the dashboard metrics.
 
-- Filter every query by `session_id`; the tested session is
-  `submission-smoke-v1`.
+- Filter every query by `session_id`; use `continuous-oct4-v1` for the current
+  66-person demo, or `submission-smoke-v1` for the 17-person fallback.
 - Filter participant trends by the dataset-qualified `participant_key`, such as
   `demo:big_ideas:001` or `demo:imu50:00`. The datasets contain different people;
   never join them on numeric IDs alone.
@@ -94,8 +116,8 @@ Both expose `session_id`, `participant_key`, `window_end`, `payload`, and
 Example latest-results query, with `$1` bound to the session ID:
 
 ```sql
-SELECT participant_key, payload, published_at
-FROM gold.dashboard_latest
+SELECT participant_key, payload, sensor_published_at, analytics_published_at
+FROM gold.dashboard_live
 WHERE session_id = $1
 ORDER BY participant_key;
 ```
@@ -103,11 +125,17 @@ ORDER BY participant_key;
 ## Read-only access boundary
 
 Create a dedicated backend login, such as `dashboard_reader`, with database
-`CONNECT`, schema `USAGE`, and `SELECT` on the two dashboard objects only. Do
+`CONNECT`, schema `USAGE`, and `SELECT` on all published objects in `gold`. Do
 not grant it admin-role membership, ownership, or write permissions. Verify its
 effective permissions before sharing it, including permissions inherited from
 shared grants. A read-only transaction default is an extra safeguard, not a
 replacement for SELECT-only permissions.
+
+`tiger/grant_output_reader.sql` grants the existing `dashboard_reader` access to
+all six current `gold` tables/views and sets SELECT defaults for future outputs
+created by the executing owner. It does not grant raw-schema access or writes.
+The two older prediction tables are included for completeness; the active live
+dashboard should still use `gold.dashboard_live` and the continuous session ID.
 
 Keep its password in backend deployment secrets and connect over TLS. Never
 share the `tsdbadmin` credentials with the frontend, put database credentials in

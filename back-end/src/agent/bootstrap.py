@@ -10,6 +10,7 @@ from agents import Agent, FunctionTool
 
 from agent.api.chat_service import ChatService
 from agent.api.sessions import ChatSessions
+from agent.api.widget_store import WidgetStore
 from agent.auth import Principal, TokenSigner
 from agent.clock import ReplayClock
 from agent.config import DEV_AUTH_SECRET, Settings
@@ -35,6 +36,7 @@ class Runtime:
     clock: ReplayClock
     signer: TokenSigner
     sessions: ChatSessions
+    widgets: WidgetStore
     chat: ChatService
 
     def queries(self, principal: Principal) -> QueryService:
@@ -97,5 +99,6 @@ def build_runtime(
         clock=clock,
         signer=signer,
         sessions=sessions,
+        widgets=WidgetStore(settings.session_db_path),
         chat=chat,
     )

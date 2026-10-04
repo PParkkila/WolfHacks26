@@ -84,19 +84,21 @@ class StreamTranslator:
 
     @staticmethod
     def _chart(end: SseEvent, output: Any) -> list[SseEvent]:
-        """A `data` event when the tool returned series to draw."""
+        """A `data` event when the tool returned series to draw.
+
+        A built widget rides along as `widget` (title, kind, query, steps), so
+        the UI can show its pipeline and pin it.
+        """
         if not isinstance(output, dict) or not isinstance(output.get("chart"), dict):
             return []
-        return [
-            SseEvent(
-                "data",
-                {
-                    "call_id": end.data["call_id"],
-                    "tool": end.data["tool"],
-                    "chart": output["chart"],
-                },
-            )
-        ]
+        data = {
+            "call_id": end.data["call_id"],
+            "tool": end.data["tool"],
+            "chart": output["chart"],
+        }
+        if isinstance(output.get("widget"), dict):
+            data["widget"] = output["widget"]
+        return [SseEvent("data", data)]
 
     def _tool_end(self, item: Any) -> SseEvent:
         call_id = _field(item.raw_item, "call_id")

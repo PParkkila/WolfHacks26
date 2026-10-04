@@ -22,6 +22,7 @@ from agent.tools.base import (
     safe_tool,
     week_summary,
 )
+from agent.tools.widgets import build_widget_tool
 
 
 def build(svc: QueryService) -> list[FunctionTool]:
@@ -225,4 +226,5 @@ def build(svc: QueryService) -> list[FunctionTool]:
         compare_to_cohort,
         cohort_overview,
         query_data,
+        build_widget_tool(svc),
     ]

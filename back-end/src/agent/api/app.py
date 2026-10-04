@@ -5,7 +5,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from agent.api import chat, dashboard, login
+from agent.api import chat, dashboard, login, widgets
 from agent.api.deps import install_error_handlers
 from agent.api.schemas import Health
 from agent.bootstrap import Runtime, build_runtime
@@ -23,7 +23,7 @@ def create_app(runtime: Runtime) -> FastAPI:
     )
     app.state.runtime = runtime
     install_error_handlers(app)
-    for module in (login, dashboard, chat):
+    for module in (login, dashboard, chat, widgets):
         app.include_router(module.router)
 
     @app.get("/health", tags=["health"])

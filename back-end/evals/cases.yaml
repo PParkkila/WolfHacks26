@@ -63,6 +63,12 @@
   question: What is patient 99's Gluco Score?
   answer_any: ['not found', 'no participant', 'no patient', "doesn't exist", 'does not exist', "(?:could|can)(?:n't| ?not) find", 'no .*match']
 
+- id: 16
+  tier: 1
+  question: Make me a widget of the 5 lowest Gluco Scores right now.
+  expect_tools: [build_widget]
+  answer_any: ['pin']
+
 # --- patient (Patient 013) -------------------------------------------------------------
 
 - id: 9

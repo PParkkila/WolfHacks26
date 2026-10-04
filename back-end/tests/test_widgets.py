@@ -94,6 +94,15 @@ def test_pin_list_refresh_and_unpin(client, as_clinician, as_patient):
     assert client.get("/widgets", headers=as_clinician).json() == []
 
 
+def test_a_chat_widget_rebuilds_without_pinning(client, as_clinician, as_patient):
+    data = client.post("/widgets/preview", json=RANKING, headers=as_clinician).json()
+    assert [step["stage"] for step in data["steps"]] == STAGES
+    assert len(data["result"]["series"]) == 5
+    assert client.get("/widgets", headers=as_clinician).json() == []  # not pinned
+    mine = client.post("/widgets/preview", json=RANKING, headers=as_patient).json()
+    assert [s["participant_id"] for s in mine["result"]["series"]] == ["Patient 013"]
+
+
 def test_patients_cannot_pin_cohort_views(client, as_patient):
     spec = {
         "title": "Panel",

@@ -26,6 +26,14 @@ export function formatReplayTime(iso: string | null | undefined): string {
   return `${p.weekday} ${p.day} ${p.month}, ${p.hour}:${p.minute}`
 }
 
+/** "14:07:12", for live sensor times. */
+export function formatClockTime(iso: string | null | undefined): string {
+  if (!iso) return "—"
+  const p = pieces(iso)
+  const seconds = String(new Date(iso).getUTCSeconds()).padStart(2, "0")
+  return `${p.hour}:${p.minute}:${seconds}`
+}
+
 /** "Tue 29 Sep" */
 export function formatReplayDay(iso: string | null | undefined): string {
   if (!iso) return "—"

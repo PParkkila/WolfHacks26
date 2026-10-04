@@ -21,6 +21,7 @@ import {
 import type { ClockState, TickEvent } from "@/lib/api/events"
 import { keys } from "@/lib/api/queries"
 import { streamSSE } from "@/lib/api/sse"
+import { publishLive } from "@/lib/live"
 
 type ClockCommand = Schemas["ClockCommand"]
 
@@ -45,7 +46,8 @@ function wait(ms: number, signal: AbortSignal) {
 /**
  * The shared replay clock. Holds one GET /stream connection for the signed-in
  * persona and refreshes clock-dependent queries when the clock moves: all of
- * them after a backwards seek, the active ones when new windows land.
+ * them after a backwards seek, the active ones when new windows land. Each
+ * tick's live readings go to the live store (`@/lib/live`).
  */
 export function ClockProvider({
   token,
@@ -65,6 +67,7 @@ export function ClockProvider({
     const onTick = (tick: TickEvent) => {
       setConnected(true)
       setClock(tick.clock)
+      publishLive(tick.live_at, tick.live)
       if (tick.reset) {
         void queryClient.invalidateQueries({
           queryKey: keys.data,
@@ -92,7 +95,10 @@ export function ClockProvider({
       }
     })()
 
-    return () => controller.abort()
+    return () => {
+      controller.abort()
+      publishLive(null, [])
+    }
   }, [token, queryClient])
 
   const control = useCallback(async (command: ClockCommand) => {

@@ -1,6 +1,7 @@
-"""Pinned widgets: pin one from the chat, list them, refresh one, unpin it."""
+"""Widgets: refresh one built in chat, pin it, list pins, refresh one, unpin it."""
 
 from fastapi import APIRouter, HTTPException, Response
+from pydantic import BaseModel
 
 from agent import widgets
 from agent.api.deps import CurrentPrincipal, Queries, RuntimeDep
@@ -12,6 +13,11 @@ router = APIRouter(tags=["widgets"])
 
 
 class WidgetData(PinnedWidget):
+    result: QueryResult
+    steps: list[WidgetStep]
+
+
+class WidgetPreview(BaseModel):
     result: QueryResult
     steps: list[WidgetStep]
 
@@ -28,6 +34,13 @@ def list_widgets(
     runtime: RuntimeDep, principal: CurrentPrincipal
 ) -> list[PinnedWidget]:
     return runtime.widgets.list(principal.user_id)
+
+
+@router.post("/widgets/preview")
+def preview_widget(spec: WidgetSpec, svc: Queries) -> WidgetPreview:
+    """Rebuild a widget from its spec without pinning it (keeps chat widgets live)."""
+    built = widgets.build(svc, spec)
+    return WidgetPreview(result=built.result, steps=built.steps)
 
 
 @router.post("/widgets", status_code=201)

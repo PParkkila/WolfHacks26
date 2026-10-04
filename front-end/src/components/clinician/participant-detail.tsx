@@ -6,6 +6,7 @@ import { useState } from "react"
 
 import { GlucoScore } from "@/components/gluco-score"
 import { QueryChart } from "@/components/query-chart"
+import { LiveValue } from "@/components/vitals"
 import { WhatChanged } from "@/components/what-changed"
 import { Button } from "@/components/ui/button"
 import {
@@ -29,7 +30,8 @@ import { friendlyError } from "@/lib/api/client"
 import type { QueryResult } from "@/lib/api/events"
 import { useParticipant, useSeries } from "@/lib/api/queries"
 import { GLUCO_CHANGE, GLUCO_SCORE, useMetrics } from "@/lib/catalog"
-import { formatReplayTime } from "@/lib/format"
+import { formatClockTime, formatReplayTime } from "@/lib/format"
+import { useLiveReading } from "@/lib/live"
 
 const RANGES = [
   { hours: 24, label: "24 h" },
@@ -58,6 +60,7 @@ function ChartBody({
 export function ParticipantDetail({ id }: { id: string }) {
   const metrics = useMetrics()
   const participant = useParticipant(id)
+  const live = useLiveReading(participant.data?.person_id)
   const [hours, setHours] = useState(168)
 
   const gluco = useSeries({
@@ -95,7 +98,9 @@ export function ParticipantDetail({ id }: { id: string }) {
               <UserRoundXIcon />
             </EmptyMedia>
             <EmptyTitle>Patient not found</EmptyTitle>
-            <EmptyDescription>{friendlyError(participant.error)}</EmptyDescription>
+            <EmptyDescription>
+              {friendlyError(participant.error)}
+            </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
             <Button variant="outline" size="sm" asChild>
@@ -145,6 +150,29 @@ export function ParticipantDetail({ id }: { id: string }) {
           <div className="ml-auto">{range}</div>
         </div>
       </div>
+
+      {live && metrics.live.length ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Live sensors</CardTitle>
+            <CardDescription>
+              Updated every second · last reading{" "}
+              {formatClockTime(live.sensor_time)} UTC
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 @2xl/main:grid-cols-3">
+            {metrics.live.map((metric) => (
+              <LiveValue
+                key={metric.name}
+                metric={metric.name}
+                info={metric}
+                value={live.values[metric.name]}
+                label={metric.label.replace(/ now$/, "")}
+              />
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="grid gap-4 @4xl/main:grid-cols-3">
         <Card>

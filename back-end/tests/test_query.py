@@ -88,7 +88,7 @@ def test_explain_change_compares_with_then_and_with_own_week(clinician):
 
 
 def test_imu_participant_has_no_heart_rate_and_that_is_not_an_error(clinician):
-    row = clinician.participant(clinician.resolve("imu50"))
+    row = clinician.participant(clinician.resolve("IMU-00"))
     assert row.values["hr_mean_bpm_24h"] is None
     report = clinician.explain_change(row.person_id)
     hr = next(c for c in report.changes if c.metric == "hr_mean_bpm_24h")

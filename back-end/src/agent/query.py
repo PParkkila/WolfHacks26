@@ -2,9 +2,10 @@
 
 `QueryService` is built per request for one signed-in user. It applies scope
 (clinicians see everyone, patients only themselves) and the replay clock (only
-windows ending at or before "now"), then answers with plain pydantic models
-that the REST API returns as-is and the agents' tools hand to the LLM. Both
-read the same numbers because both come through here.
+windows ending at or before "now"), overlays the live sensor readings on each
+person's newest window once the clock has reached it, then answers with plain
+pydantic models that the REST API returns as-is and the agents' tools hand to
+the LLM. Both read the same numbers because both come through here.
 """
 
 import difflib
@@ -29,11 +30,13 @@ from agent.domain.errors import (
 from agent.domain.metrics import (
     GLUCO_CHANGE,
     GLUCO_SCORE,
+    LIVE_METRICS,
     METRICS,
     SENSOR_METRICS,
     unit_of,
 )
-from agent.domain.models import Window
+from agent.domain.models import LiveReading, Window
+from agent.live import LiveStore
 from agent.store import WindowStore
 
 DEFAULT_HOURS = 168.0
@@ -94,6 +97,8 @@ class ParticipantRow(BaseModel):
     source_dataset: str
     window_end: datetime
     values: dict[str, float | None]
+    # When the live readings in `values` were taken; None without live data.
+    live_at: datetime | None = None
 
 
 class MetricChange(BaseModel):
@@ -158,6 +163,7 @@ class MetricInfo(BaseModel):
     unit: str
     description: str
     higher_is_better: bool | None
+    live: bool
 
 
 class ParticipantInfo(BaseModel):
@@ -216,11 +222,16 @@ def check_metrics(metrics: Sequence[str]) -> None:
 
 class QueryService:
     def __init__(
-        self, store: WindowStore, clock: ReplayClock, principal: Principal
+        self,
+        store: WindowStore,
+        clock: ReplayClock,
+        principal: Principal,
+        live: LiveStore | None = None,
     ) -> None:
         self._store = store
         self._clock = clock
         self.principal = principal
+        self._live = live
 
     # --- scope and time -----------------------------------------------------
 
@@ -266,8 +277,42 @@ class QueryService:
         return self._store.history(person_id, start, end)
 
     def latest(self, person_id: str) -> Window | None:
+        """The newest window up to now, with the live readings when there are any."""
         windows = self._history(person_id)
-        return windows[-1] if windows else None
+        return self._with_live(windows[-1]) if windows else None
+
+    # --- live readings --------------------------------------------------------
+
+    def _live_for(self, window: Window) -> LiveReading | None:
+        """Live readings that belong with `window`: only the person's newest one,
+        and only once the clock has reached it (a replay behind the data would
+        otherwise see readings from its future)."""
+        if self._live is None:
+            return None
+        newest = self._store.latest(window.person_id)
+        now = self.as_of()
+        if (
+            newest is None
+            or now is None
+            or newest.window_end > now
+            or window.window_end != newest.window_end
+        ):
+            return None
+        return self._live.reading(window.person_id)
+
+    def _with_live(self, window: Window) -> Window:
+        reading = self._live_for(window)
+        if reading is None:
+            return window
+        return window.model_copy(update={"values": {**window.values, **reading.values}})
+
+    def live(self, person_id: str) -> LiveReading | None:
+        newest = self._store.latest(person_id)
+        return self._live_for(newest) if newest else None
+
+    def live_readings(self) -> list[LiveReading]:
+        """Everyone visible's live readings (for the live stream)."""
+        return [r for pid in self.visible() if (r := self.live(pid))]
 
     def _require_latest(self, person_id: str) -> Window:
         window = self.latest(person_id)
@@ -276,12 +321,15 @@ class QueryService:
         return window
 
     def _row(self, window: Window) -> ParticipantRow:
+        reading = self._live_for(window)
+        values = {**window.values, **reading.values} if reading else window.values
         return ParticipantRow(
             person_id=window.person_id,
             display_name=display_name(window.person_id),
             source_dataset=window.source_dataset,
             window_end=window.window_end,
-            values={k: _round(v) for k, v in window.values.items()},
+            values={k: _round(v) for k, v in values.items()},
+            live_at=reading.sensor_time if reading else None,
         )
 
     # --- generic query ------------------------------------------------------
@@ -308,10 +356,28 @@ class QueryService:
         if start is not None and end is not None and start >= end:
             raise QueryError("start must be before end.")
 
+        live_metrics = [m for m in spec.metrics if m in LIVE_METRICS]
+
+        def history(pid: str) -> list[Window]:
+            """The windows in range; a query up to now that asks for live
+            metrics also gets a point at the live reading's time."""
+            windows = self._history(pid, start, end)
+            if live_metrics and end is not None and end == as_of and windows:
+                reading = self._live_for(windows[-1])
+                if reading is not None:
+                    windows.append(
+                        Window(
+                            person_id=pid,
+                            source_dataset=windows[-1].source_dataset,
+                            window_start=reading.sensor_time,
+                            window_end=reading.sensor_time,
+                            values={m: reading.values.get(m) for m in live_metrics},
+                        )
+                    )
+            return windows
+
         per_person = {
-            pid: q.participant_points(
-                self._history(pid, start, end), spec.metrics, spec.bucket, spec.agg
-            )
+            pid: q.participant_points(history(pid), spec.metrics, spec.bucket, spec.agg)
             for pid in people
         }
         per_person = {pid: points for pid, points in per_person.items() if points}
@@ -521,6 +587,7 @@ class QueryService:
                     unit=spec.unit,
                     description=spec.description,
                     higher_is_better=spec.higher_is_better,
+                    live=spec.live,
                 )
                 for name, spec in METRICS.items()
             ],

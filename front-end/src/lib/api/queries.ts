@@ -31,6 +31,8 @@ export const keys = {
   // The pin list is not under `data`: it only changes when the user pins.
   pins: ["pins"] as const,
   widget: (id: string) => ["data", "widget", id] as const,
+  widgetPreview: (spec: WidgetSpec) =>
+    ["data", "widget-preview", spec] as const,
   chat: ["chat"] as const,
   threads: ["chat", "threads"] as const,
 }
@@ -127,8 +129,11 @@ export function usePinnedWidgets() {
   })
 }
 
+// Widgets showing live readings also refresh between new analytics windows.
+const LIVE_WIDGET_REFRESH_MS = 5_000
+
 /** A pinned widget rebuilt on the server (query + compliance check). */
-export function useWidgetData(id: string) {
+export function useWidgetData(id: string, live = false) {
   return useQuery({
     queryKey: keys.widget(id),
     queryFn: () =>
@@ -138,6 +143,27 @@ export function useWidgetData(id: string) {
         })
       ),
     placeholderData: keepPreviousData,
+    refetchInterval: live ? LIVE_WIDGET_REFRESH_MS : false,
+  })
+}
+
+/**
+ * A widget built in chat, rebuilt on the server so it stays live like a pinned
+ * one. `initial` is the result the chat delivered, shown until the first rebuild.
+ */
+export function useWidgetPreview(
+  spec: WidgetSpec,
+  initial: Schemas["QueryResult"],
+  live = false
+) {
+  return useQuery({
+    queryKey: keys.widgetPreview(spec),
+    queryFn: async () =>
+      (await unwrap(api.POST("/widgets/preview", { body: spec }))).result,
+    initialData: initial,
+    initialDataUpdatedAt: 0,
+    placeholderData: keepPreviousData,
+    refetchInterval: live ? LIVE_WIDGET_REFRESH_MS : false,
   })
 }
 

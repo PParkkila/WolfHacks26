@@ -70,7 +70,8 @@ class Settings(BaseSettings):
     max_turns: int = 8
     mock_seed: int = 7
     statement_timeout_ms: int = 5_000
-    store_refresh_s: float = 10.0  # how often new published rows are picked up
+    store_refresh_s: float = 5.0  # how often new published rows are picked up
+    live_refresh_s: float = 1.0  # how often the live sensor readings are re-read
 
     session_db_path: Path = Path("var/sessions.sqlite")
     trace_path: Path = Path("var/trace.jsonl")

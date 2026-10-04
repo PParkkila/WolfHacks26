@@ -65,6 +65,10 @@ class WindowStore:
             self._snapshot = self._build_snapshot()
         return len(published)
 
+    def invalidate(self) -> None:
+        """Refresh on the next read rather than waiting out `refresh_s`."""
+        self._refreshed_at = None
+
     def _build_snapshot(self) -> _Snapshot:
         by_person: dict[str, list[Window]] = {}
         for window in self._rows.values():

@@ -3,6 +3,7 @@
 import { InfoIcon, PauseIcon, PlayIcon } from "lucide-react"
 import { useState } from "react"
 
+import { LiveStatus } from "@/components/live"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -55,6 +56,8 @@ export function ReplayControls() {
   if (!clock?.now || !clock.data_start || !clock.data_end) {
     return <Skeleton className="h-8 w-full" />
   }
+  // Replay off: the data is live, so there is no demo time to control.
+  if (!clock.enabled) return <LiveStatus clock={clock} />
 
   const start = Date.parse(clock.data_start)
   const end = Date.parse(clock.data_end)
@@ -77,7 +80,9 @@ export function ReplayControls() {
           {clock.playing ? <PauseIcon /> : <PlayIcon />}
         </Button>
         <AsOf />
-        {clock.at_end ? <Badge variant="secondary">End of demo data</Badge> : null}
+        {clock.at_end ? (
+          <Badge variant="secondary">End of demo data</Badge>
+        ) : null}
       </div>
 
       <div className="flex min-w-48 flex-1 items-center gap-3">
@@ -104,7 +109,9 @@ export function ReplayControls() {
       </div>
 
       <div className="flex items-center gap-2">
-        <span className="text-xs text-muted-foreground">1 hour of data every</span>
+        <span className="text-xs text-muted-foreground">
+          1 hour of data every
+        </span>
         <ToggleGroup
           type="single"
           size="sm"
@@ -112,7 +119,10 @@ export function ReplayControls() {
           value={String(clock.seconds_per_hour)}
           onValueChange={(value) => {
             if (value)
-              void control({ action: "speed", seconds_per_hour: Number(value) })
+              void control({
+                action: "speed",
+                seconds_per_hour: Number(value),
+              })
           }}
           aria-label="Demo speed"
         >

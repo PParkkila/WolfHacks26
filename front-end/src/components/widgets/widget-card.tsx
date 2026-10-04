@@ -15,7 +15,8 @@ import { WidgetView } from "@/components/widgets/widget-view"
 import { Button } from "@/components/ui/button"
 import { friendlyError } from "@/lib/api/client"
 import type { ChatWidget, QueryResult, WidgetStep } from "@/lib/api/events"
-import { usePinWidget } from "@/lib/api/queries"
+import { usePinWidget, useWidgetPreview } from "@/lib/api/queries"
+import { useMetrics } from "@/lib/catalog"
 import { cn } from "@/lib/utils"
 
 const STAGES: Record<
@@ -65,7 +66,10 @@ export function WidgetSteps({ steps }: { steps: WidgetStep[] }) {
   )
 }
 
-/** A widget the agent built in chat: its chart, its pipeline, and a Pin button. */
+/**
+ * A widget the agent built in chat: its chart, its pipeline, and a Pin button.
+ * The chart rebuilds on the server as new data arrives, like a pinned widget.
+ */
 export function WidgetCard({
   widget,
   chart,
@@ -77,16 +81,20 @@ export function WidgetCard({
 }) {
   const pin = usePinWidget()
   const pinned = pin.isSuccess
+  const metrics = useMetrics()
+  const spec = { title: widget.title, kind: widget.kind, query: widget.query }
+  const current = useWidgetPreview(
+    spec,
+    chart,
+    metrics.anyLive(widget.query.metrics ?? [])
+  )
 
   const onPin = () =>
-    pin.mutate(
-      { title: widget.title, kind: widget.kind, query: widget.query },
-      {
-        onSuccess: () =>
-          toast.success(`Pinned “${widget.title}” to your dashboard`),
-        onError: (error) => toast.error(friendlyError(error)),
-      }
-    )
+    pin.mutate(spec, {
+      onSuccess: () =>
+        toast.success(`Pinned “${widget.title}” to your dashboard`),
+      onError: (error) => toast.error(friendlyError(error)),
+    })
 
   return (
     <div className="@container/widget flex w-full flex-col gap-3 rounded-lg border bg-card p-3">
@@ -111,7 +119,11 @@ export function WidgetCard({
           {pinned ? "Pinned" : "Pin"}
         </Button>
       </div>
-      <WidgetView kind={widget.kind} result={chart} audience={audience} />
+      <WidgetView
+        kind={widget.kind}
+        result={current.data}
+        audience={audience}
+      />
       <div className="border-t pt-2.5">
         <WidgetSteps steps={widget.steps} />
       </div>

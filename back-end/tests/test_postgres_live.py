@@ -9,7 +9,7 @@ import pytest
 
 from agent.config import Settings
 from agent.data.postgres import PostgresSource
-from agent.domain.metrics import GLUCO_SCORE
+from agent.domain.metrics import GLUCO_SCORE, LIVE_METRICS
 from agent.store import WindowStore
 
 settings = Settings(agent_model="unused")  # pyright: ignore[reportCallIssue]
@@ -36,6 +36,18 @@ def test_reads_published_windows(source):
         assert windows == sorted(windows, key=lambda w: w.window_end)
         scores = [w.value(GLUCO_SCORE) for w in windows]
         assert all(s is None or 0 <= s <= 100 for s in scores)
+
+
+def test_live_readings_cover_the_panel(source):
+    store = WindowStore(source)
+    participants = set(store.participants())
+    assert len(participants) >= 60
+    readings = source.fetch_live()
+    assert {r.person_id for r in readings} == participants
+    for reading in readings:
+        assert set(reading.values) == set(LIVE_METRICS)
+        if ":imu50:" in reading.person_id:
+            assert reading.values["latest_hr_bpm"] is None
 
 
 def test_imu_device_has_no_heart_rate(source):

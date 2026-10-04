@@ -18,6 +18,7 @@ from agent.data.factory import build_source
 from agent.domain.ports import WindowSource
 from agent.factory import build_agent
 from agent.guardrails import build_input_guardrails
+from agent.live import LiveStore
 from agent.llm import LlmConnection
 from agent.observability.trace import JsonlTracer
 from agent.query import QueryService
@@ -33,6 +34,7 @@ class Runtime:
     llm: LlmConnection
     source: WindowSource
     store: WindowStore
+    live: LiveStore
     clock: ReplayClock
     signer: TokenSigner
     sessions: ChatSessions
@@ -40,7 +42,7 @@ class Runtime:
     chat: ChatService
 
     def queries(self, principal: Principal) -> QueryService:
-        return QueryService(self.store, self.clock, principal)
+        return QueryService(self.store, self.clock, principal, self.live)
 
     def tools_for(self, principal: Principal) -> list[FunctionTool]:
         return build_tools(self.queries(principal))
@@ -59,6 +61,7 @@ def build_runtime(
 
     source = source or build_source(settings)
     store = WindowStore(source, settings.store_refresh_s, time_source)
+    live = LiveStore(source, store, settings.live_refresh_s, time_source)
     clock = ReplayClock(
         store.data_range,
         start=settings.replay_start,
@@ -81,7 +84,7 @@ def build_runtime(
             principal=principal,
             now=clock.now(),
             model=settings.agent_model,
-            tools=build_tools(QueryService(store, clock, principal)),
+            tools=build_tools(QueryService(store, clock, principal, live)),
             input_guardrails=guardrails[principal.role],
         )
 
@@ -96,6 +99,7 @@ def build_runtime(
         llm=llm,
         source=source,
         store=store,
+        live=live,
         clock=clock,
         signer=signer,
         sessions=sessions,

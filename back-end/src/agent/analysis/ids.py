@@ -1,8 +1,9 @@
 """Participant ids: display names and resolving what people type.
 
-Keys look like "demo:big_ideas:013" or "demo:imu50:00". People type "13",
-"P013", "participant 13", "imu50" or the full key; `resolve_participant` maps
-all of them to the one key they mean.
+Keys look like "demo:big_ideas:013" or "demo:imu50:13". People type "13",
+"P013", "participant 13", "IMU-13" or the full key; `resolve_participant` maps
+all of them to the one key they mean. A number without "IMU" means the BIG
+IDEAs participant, matching the display names.
 """
 
 import difflib
@@ -60,6 +61,12 @@ def resolve_participant(ref: str, known: Iterable[str]) -> str:
             or (_parts(k)[1].isdigit() and int(_parts(k)[1]) == int(numbers[-1]))
         )
     ]
+    if hint is None and len(candidates) > 1:
+        # IMU participants are always named "IMU-13", so a bare "13" or
+        # "Patient 013" means the other one.
+        others = [k for k in candidates if not _parts(k)[0].startswith("imu")]
+        if others:
+            candidates = others
     if (numbers or hint) and len(candidates) == 1:
         return candidates[0]
     if (numbers or hint) and len(candidates) > 1:

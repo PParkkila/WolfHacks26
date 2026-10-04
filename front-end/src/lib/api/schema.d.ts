@@ -201,10 +201,11 @@ export interface paths {
         };
         /**
          * Stream
-         * @description Push a `tick` whenever the clock moves, with the newly visible windows.
+         * @description Push a `tick` whenever the clock moves or the live readings change.
          *
-         *     `reset` is true when the clock jumped backwards (a seek): the UI should re-run
-         *     its queries rather than append.
+         *     Each tick carries the newly visible windows and everyone visible's live
+         *     readings. `reset` is true when the clock jumped backwards (a seek): the UI
+         *     should re-run its queries rather than append.
          */
         get: operations["stream_stream_get"];
         put?: never;
@@ -298,6 +299,26 @@ export interface paths {
         put?: never;
         /** Pin Widget */
         post: operations["pin_widget_widgets_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/widgets/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Widget
+         * @description Rebuild a widget from its spec without pinning it (keeps chat widgets live).
+         */
+        post: operations["preview_widget_widgets_preview_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -602,6 +623,8 @@ export interface components {
             description: string;
             /** Higher Is Better */
             higher_is_better: boolean | null;
+            /** Live */
+            live: boolean;
         };
         /** MetricSummary */
         MetricSummary: {
@@ -644,6 +667,8 @@ export interface components {
             values: {
                 [key: string]: number | null;
             };
+            /** Live At */
+            live_at?: string | null;
         };
         /** PinnedWidget */
         PinnedWidget: {
@@ -798,6 +823,12 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            result: components["schemas"]["QueryResult"];
+            /** Steps */
+            steps: components["schemas"]["WidgetStep"][];
+        };
+        /** WidgetPreview */
+        WidgetPreview: {
             result: components["schemas"]["QueryResult"];
             /** Steps */
             steps: components["schemas"]["WidgetStep"][];
@@ -1340,6 +1371,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PinnedWidget"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_widget_widgets_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WidgetSpec"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetPreview"];
                 };
             };
             /** @description Validation Error */

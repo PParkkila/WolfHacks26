@@ -2,17 +2,17 @@
 
 import {
   ArrowUpIcon,
+  ChevronDownIcon,
   HistoryIcon,
   MessageSquareIcon,
-  PanelRightCloseIcon,
   PlusIcon,
   SquareIcon,
 } from "lucide-react"
 import { useState } from "react"
 
-import { GlucoMark } from "@/components/brand"
 import { ChatMessage } from "@/components/chat/chat-message"
 import { useChat } from "@/components/chat/chat-provider"
+import { GlucoDot } from "@/components/chat/gluco-dot"
 import type { Audience } from "@/components/estimate-note"
 import { Button } from "@/components/ui/button"
 import {
@@ -125,8 +125,8 @@ function Composer({ audience }: { audience: Audience }) {
           aria-label="Message Gluco"
           placeholder={
             audience === "patient"
-              ? "Ask Gluco about your health data…"
-              : "Ask about your panel or a specific patient…"
+              ? "Ask me about your week…"
+              : "Ask me about your panel…"
           }
           className="max-h-40 min-h-10"
           rows={1}
@@ -186,10 +186,12 @@ export function ChatPanel({
   const { messages, newChat, send, loadingThread, chartsMissing, streaming } =
     useChat()
 
+  const headerMood = streaming ? "thinking" : "idle"
+
   return (
-    <div className="flex h-full min-h-0 flex-col bg-card">
+    <div className="flex h-full min-h-0 flex-1 flex-col">
       <header className="flex h-12 shrink-0 items-center gap-2 border-b px-3">
-        <GlucoMark className="size-5" />
+        <GlucoDot mood={headerMood} className="size-7" />
         <h2 className="flex items-baseline gap-2 text-sm">
           <span className="font-semibold">Gluco</span>
           <span className="text-muted-foreground">
@@ -212,9 +214,9 @@ export function ChatPanel({
               variant="ghost"
               size="icon-sm"
               onClick={onClose}
-              aria-label="Hide assistant"
+              aria-label="Close chat"
             >
-              <PanelRightCloseIcon />
+              <ChevronDownIcon />
             </Button>
           ) : null}
         </div>
@@ -236,18 +238,18 @@ export function ChatPanel({
                 <MessageScrollerItem className="my-auto">
                   <Empty>
                     <EmptyHeader>
-                      <EmptyMedia variant="icon" className="bg-accent">
-                        <GlucoMark className="size-6" />
+                      <EmptyMedia>
+                        <GlucoDot mood="happy" className="size-10" />
                       </EmptyMedia>
                       <EmptyTitle>
                         {audience === "patient"
-                          ? "Ask Gluco about your week"
-                          : "Ask Gluco about your patients"}
+                          ? "Hi, I'm Gluco!"
+                          : "Hi, I'm Gluco"}
                       </EmptyTitle>
                       <EmptyDescription>
                         {audience === "patient"
-                          ? "Simple answers about your own Gluco Score and wearable readings."
-                          : "Answers use the same data as the dashboard, up to the time shown."}
+                          ? "Ask me about your week, your score, or anything you're curious about."
+                          : "Ask me about your panel or a specific patient."}
                       </EmptyDescription>
                     </EmptyHeader>
                     <EmptyContent>

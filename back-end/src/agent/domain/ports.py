@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
-from agent.domain.models import Window
+from agent.domain.models import LiveReading, Window
 
 
 @dataclass(frozen=True)
@@ -20,6 +20,10 @@ class WindowSource(Protocol):
         Re-published windows come back again; the caller merges by
         (person_id, window_end), so overlap is harmless.
         """
+        ...
+
+    def fetch_live(self) -> list[LiveReading]:
+        """Every participant's newest sensor readings (one per participant)."""
         ...
 
     def ping(self) -> bool: ...

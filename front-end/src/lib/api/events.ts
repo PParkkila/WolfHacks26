@@ -11,6 +11,16 @@ export type WidgetStep = Schemas["WidgetStep"]
 /** A widget built in chat: the spec a pin stores, plus how it was built. */
 export type ChatWidget = WidgetSpec & { steps: WidgetStep[] }
 
+/** One participant's newest wearable readings, refreshed every second. */
+export type LiveReading = {
+  person_id: string
+  sensor_time: string
+  /** End of the newest analytics window, so a change means new analytics. */
+  analytics_window_end: string | null
+  /** Keyed by the catalog's live metrics; null when the device lacks a sensor. */
+  values: Record<string, number | null>
+}
+
 /** GET /stream */
 export type TickEvent = {
   type: "tick"
@@ -18,6 +28,10 @@ export type TickEvent = {
   /** True after a backwards seek: re-run queries instead of appending. */
   reset: boolean
   new_windows: unknown[]
+  /** Newest sensor time across `live`; null without live data. */
+  live_at: string | null
+  /** Everyone visible's live readings (empty while the replay is behind). */
+  live: LiveReading[]
 }
 
 /** POST /chat */

@@ -13,6 +13,7 @@ import {
 } from "lucide-react"
 import { Area, AreaChart, ReferenceLine, XAxis, YAxis } from "recharts"
 
+import { LiveDot } from "@/components/live"
 import { Card } from "@/components/ui/card"
 import {
   ChartContainer,
@@ -38,16 +39,31 @@ import { cn } from "@/lib/utils"
 
 type MetricChange = Schemas["MetricChange"]
 
-/** The three readings a patient leads with, in plain words. */
+/**
+ * The three readings a patient leads with, in plain words: each 24-hour
+ * average and the live reading of the same sensor.
+ */
 export const PRIMARY_VITALS: {
   metric: string
+  liveMetric: string
   title: string
   icon: LucideIcon
 }[] = [
-  { metric: "hr_mean_bpm_24h", title: "Heart rate", icon: HeartPulseIcon },
-  { metric: "motion_mean_g", title: "Movement", icon: FootprintsIcon },
+  {
+    metric: "hr_mean_bpm_24h",
+    liveMetric: "latest_hr_bpm",
+    title: "Heart rate",
+    icon: HeartPulseIcon,
+  },
+  {
+    metric: "motion_mean_g",
+    liveMetric: "latest_motion_g",
+    title: "Movement",
+    icon: FootprintsIcon,
+  },
   {
     metric: "temperature_mean_c_24h",
+    liveMetric: "latest_skin_temperature_c",
     title: "Skin temperature",
     icon: ThermometerIcon,
   },
@@ -67,7 +83,11 @@ export function usualStatus(
   higherIsBetter: boolean | null | undefined
 ): Status {
   if (z == null)
-    return { tone: "unknown", label: "Not enough readings yet", icon: MinusIcon }
+    return {
+      tone: "unknown",
+      label: "Not enough readings yet",
+      icon: MinusIcon,
+    }
   const size = Math.abs(z)
   if (size < 1)
     return { tone: "usual", label: "Close to your usual", icon: CheckIcon }
@@ -126,7 +146,8 @@ export function UsualGauge({
   z: number | null | undefined
   status: Status
 }) {
-  const position = z == null ? null : ((Math.min(Math.max(z, -3), 3) + 3) / 6) * 100
+  const position =
+    z == null ? null : ((Math.min(Math.max(z, -3), 3) + 3) / 6) * 100
   return (
     <div className="flex flex-col gap-1.5" aria-hidden="true">
       <div className="relative h-1.5 rounded-full bg-foreground/10">
@@ -163,8 +184,37 @@ function MetricInfoButton({ info }: { info: MetricInfo | undefined }) {
           <InfoIcon className="size-3.5" />
         </button>
       </HoverCardTrigger>
-      <HoverCardContent className="text-sm">{info.description}</HoverCardContent>
+      <HoverCardContent className="text-sm">
+        {info.description}
+      </HoverCardContent>
     </HoverCard>
+  )
+}
+
+/** A live reading on one line: pulsing dot, label, value. */
+export function LiveValue({
+  metric,
+  info,
+  value,
+  label = "Right now",
+}: {
+  metric: string
+  info: MetricInfo | undefined
+  value: number | null | undefined
+  label?: string
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg bg-accent/60 px-3 py-2">
+      <span className="flex items-center gap-2 text-sm text-muted-foreground">
+        <LiveDot />
+        {label}
+      </span>
+      {value == null ? (
+        <span className="text-sm text-muted-foreground">No reading</span>
+      ) : (
+        <Value metric={metric} info={info} value={value} size="sm" />
+      )}
+    </div>
   )
 }
 
@@ -292,6 +342,7 @@ export function VitalTile({
   value,
   change,
   week,
+  live,
 }: {
   title: string
   icon: LucideIcon
@@ -300,6 +351,8 @@ export function VitalTile({
   value: number | null | undefined
   change: MetricChange | undefined
   week: QueryResult | undefined
+  /** The live reading of this sensor, when the data is live. */
+  live?: { metric: string; info: MetricInfo | undefined; value: number | null }
 }) {
   const status = usualStatus(change?.z_vs_baseline, info?.higher_is_better)
   return (
@@ -313,8 +366,16 @@ export function VitalTile({
           <MetricInfoButton info={info} />
         </span>
       </div>
+      {live ? <LiveValue {...live} /> : null}
       <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-2">
-        <Value metric={metric} info={info} value={value} size="lg" />
+        <div className="flex flex-col gap-0.5">
+          <Value metric={metric} info={info} value={value} size="lg" />
+          {live ? (
+            <span className="text-xs text-muted-foreground">
+              24-hour average
+            </span>
+          ) : null}
+        </div>
         <StatusChip status={status} />
       </div>
       <div className="flex flex-col gap-1">

@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation"
 import { useState } from "react"
 
 import { participantHref } from "@/components/clinician/links"
+import { LiveDot } from "@/components/live"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
@@ -46,6 +47,7 @@ import {
   type MetricInfo,
 } from "@/lib/catalog"
 import { formatReplayTime } from "@/lib/format"
+import { useLiveReadings } from "@/lib/live"
 import { cn } from "@/lib/utils"
 
 type Sort = { by: string; order: SortOrder }
@@ -84,7 +86,10 @@ function SortHeader({
             onClick={() => onSort(metric.name)}
           >
             <span className="flex flex-col items-end text-right leading-tight">
-              <span>{metric.label}</span>
+              <span className="flex items-center gap-1.5">
+                {metric.live ? <LiveDot /> : null}
+                {metric.label}
+              </span>
               <span className="text-xs font-normal text-muted-foreground">
                 {metric.unit}
               </span>
@@ -106,6 +111,13 @@ export function ParticipantTable() {
   const metrics = useMetrics()
   const [sort, setSort] = useState<Sort>({ by: GLUCO_SCORE, order: "asc" })
   const participants = useParticipants(sort.by, sort.order)
+  const live = useLiveReadings()
+  // Score first, then the live readings, then the 24 h summaries.
+  const columns = [
+    ...metrics.list.filter((m) => !m.live && !metrics.sensors.includes(m)),
+    ...metrics.live,
+    ...metrics.sensors,
+  ]
 
   const onSort = (metric: string) =>
     setSort((prev) =>
@@ -119,8 +131,8 @@ export function ParticipantTable() {
       <CardHeader>
         <CardTitle>Patients</CardTitle>
         <CardDescription>
-          Most recent 24 h window for each patient. Select a column to sort;
-          select a row for detail.
+          Most recent 24 h window for each patient; columns marked with a dot
+          update every second. Select a column to sort; select a row for detail.
         </CardDescription>
         <CardAction>{participants.isFetching ? <Spinner /> : null}</CardAction>
       </CardHeader>
@@ -128,7 +140,9 @@ export function ParticipantTable() {
         {participants.isError ? (
           <Alert variant="destructive">
             <TriangleAlertIcon />
-            <AlertDescription>{friendlyError(participants.error)}</AlertDescription>
+            <AlertDescription>
+              {friendlyError(participants.error)}
+            </AlertDescription>
           </Alert>
         ) : !participants.data || !metrics.ready ? (
           <div className="flex flex-col gap-2">
@@ -141,7 +155,7 @@ export function ParticipantTable() {
             <TableHeader>
               <TableRow>
                 <TableHead className="align-bottom">Patient</TableHead>
-                {metrics.list.map((metric) => (
+                {columns.map((metric) => (
                   <SortHeader
                     key={metric.name}
                     metric={metric}
@@ -170,20 +184,28 @@ export function ParticipantTable() {
                       {row.display_name}
                     </Link>
                   </TableCell>
-                  {metrics.list.map((metric) => (
-                    <TableCell
-                      key={metric.name}
-                      className={cn(
-                        "text-right tabular-nums",
-                        metric.name === GLUCO_SCORE && "font-semibold",
-                        sort.by === metric.name && "bg-muted/50"
-                      )}
-                    >
-                      {formatValue(metric.name, row.values[metric.name], {
-                        signed: metric.name === GLUCO_CHANGE,
-                      })}
-                    </TableCell>
-                  ))}
+                  {columns.map((metric) => {
+                    const reading = metric.live
+                      ? live.byPerson.get(row.person_id)
+                      : undefined
+                    const value = reading
+                      ? reading.values[metric.name]
+                      : row.values[metric.name]
+                    return (
+                      <TableCell
+                        key={metric.name}
+                        className={cn(
+                          "text-right tabular-nums",
+                          metric.name === GLUCO_SCORE && "font-semibold",
+                          sort.by === metric.name && "bg-muted/50"
+                        )}
+                      >
+                        {formatValue(metric.name, value, {
+                          signed: metric.name === GLUCO_CHANGE,
+                        })}
+                      </TableCell>
+                    )
+                  })}
                   <TableCell className="text-right text-muted-foreground tabular-nums">
                     {formatReplayTime(row.window_end)}
                   </TableCell>

@@ -14,6 +14,8 @@ class MetricSpec:
     description: str
     # True: higher is better; False: lower is better; None: no direction.
     higher_is_better: bool | None
+    # True: a seconds-old sensor reading rather than a 24-hour summary.
+    live: bool = False
 
 
 GLUCO_SCORE = "gluco_score"
@@ -81,12 +83,47 @@ METRICS: dict[str, MetricSpec] = {
         "hours (closer to 1 means they moved together).",
         None,
     ),
+    "latest_hr_bpm": MetricSpec(
+        "Heart rate now",
+        "bpm",
+        "The most recent heart-rate reading from the wearable, updated every second.",
+        None,
+        live=True,
+    ),
+    "latest_motion_g": MetricSpec(
+        "Movement now",
+        "g",
+        "The most recent wrist movement reading from the wearable, updated every "
+        "second.",
+        None,
+        live=True,
+    ),
+    "latest_skin_temperature_c": MetricSpec(
+        "Skin temperature now",
+        "°C",
+        "The most recent skin temperature reading at the wrist (not core body "
+        "temperature), updated every second.",
+        None,
+        live=True,
+    ),
 }
 
-# Measured by the wearable, as opposed to the model's Gluco Score.
-SENSOR_METRICS: tuple[str, ...] = tuple(
-    name for name in METRICS if name not in (GLUCO_SCORE, GLUCO_CHANGE)
+# Readings the wearable streams every second.
+LIVE_METRICS: tuple[str, ...] = tuple(
+    name for name, spec in METRICS.items() if spec.live
 )
+
+# 24-hour summaries measured by the wearable, as opposed to the model's Gluco
+# Score and the live readings.
+SENSOR_METRICS: tuple[str, ...] = tuple(
+    name
+    for name, spec in METRICS.items()
+    if name not in (GLUCO_SCORE, GLUCO_CHANGE) and not spec.live
+)
+
+# Every value a published window carries besides the Gluco Score: its payload
+# also holds the live readings as they were when the window was computed.
+WINDOW_METRICS: tuple[str, ...] = SENSOR_METRICS + LIVE_METRICS
 
 
 def unit_of(metric: str) -> str:

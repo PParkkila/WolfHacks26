@@ -52,9 +52,7 @@ function Stat({
         <CardDescription>{label}</CardDescription>
       </CardHeader>
       <CardContent className="flex items-baseline gap-2">
-        <span className="text-3xl font-bold tracking-tight">
-          {value}
-        </span>
+        <span className="text-3xl font-bold tracking-tight">{value}</span>
         {hint ? (
           <span className="text-xs text-muted-foreground">{hint}</span>
         ) : null}
@@ -80,7 +78,9 @@ function RowList({
       </CardHeader>
       <CardContent>
         {rows.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No patients to show yet.</p>
+          <p className="text-sm text-muted-foreground">
+            No patients to show yet.
+          </p>
         ) : (
           <ItemGroup className="gap-1">
             {rows.map((row) => (
@@ -125,7 +125,10 @@ export function CohortOverview() {
   const gluco = data?.gluco_score
 
   return (
-    <section className="flex flex-col gap-4" aria-label="Patient panel overview">
+    <section
+      className="flex flex-col gap-4"
+      aria-label="Patient panel overview"
+    >
       <div className="grid gap-4 @xl/main:grid-cols-2 @4xl/main:grid-cols-4">
         {data ? (
           <>
@@ -185,15 +188,15 @@ export function CohortOverview() {
       <Card>
         <CardHeader>
           <CardTitle>Panel Gluco Score, last 7 days</CardTitle>
-          <CardDescription>
-            Hourly mean across all patients.
-          </CardDescription>
+          <CardDescription>Hourly mean across all patients.</CardDescription>
         </CardHeader>
         <CardContent>
           {trend.data ? (
             <QueryChart result={trend.data} showTitles={false} height={220} />
           ) : trend.isError ? (
-            <p className="text-sm text-destructive">{friendlyError(trend.error)}</p>
+            <p className="text-sm text-destructive">
+              {friendlyError(trend.error)}
+            </p>
           ) : (
             <Skeleton className="h-56" />
           )}

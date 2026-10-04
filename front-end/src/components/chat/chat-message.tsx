@@ -6,6 +6,7 @@ import type {
   ChatMessage as ChatMessageType,
   ChatPart,
 } from "@/components/chat/chat-provider"
+import { ThinkingDots } from "@/components/chat/gluco-dot"
 import { Markdown } from "@/components/chat/markdown"
 import type { Audience } from "@/components/estimate-note"
 import { QueryChart } from "@/components/query-chart"
@@ -151,10 +152,10 @@ export function ChatMessage({
       <MessageContent>
         {thinking ? (
           <Marker>
-            <MarkerIcon>
-              <Spinner />
+            <MarkerIcon className="w-8">
+              <ThinkingDots />
             </MarkerIcon>
-            <MarkerContent className="shimmer text-xs">
+            <MarkerContent className="text-xs">
               {audience === "patient" ? "One moment…" : "Thinking…"}
             </MarkerContent>
           </Marker>

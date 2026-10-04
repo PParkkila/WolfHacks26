@@ -65,7 +65,7 @@ def build(svc: QueryService) -> list[FunctionTool]:
         """One participant's newest values and their Gluco Score over the last 7 days.
 
         Args:
-            person_id: The participant, e.g. "13", "P013", "imu50" or the full key.
+            person_id: The participant, e.g. "13", "P013", "IMU-13" or the full key.
         """
         pid = svc.resolve(person_id)
         latest = svc.participant(pid)

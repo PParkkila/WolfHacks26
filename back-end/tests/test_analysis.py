@@ -19,6 +19,7 @@ KNOWN = [
     "demo:big_ideas:002",
     "demo:big_ideas:013",
     "demo:imu50:00",
+    "demo:imu50:13",
 ]
 
 
@@ -66,7 +67,9 @@ def test_display_names():
         ("P013", "demo:big_ideas:013"),
         ("participant 13", "demo:big_ideas:013"),
         ("big_ideas:013", "demo:big_ideas:013"),
-        ("imu50", "demo:imu50:00"),
+        ("Patient 013", "demo:big_ideas:013"),
+        ("IMU-13", "demo:imu50:13"),
+        ("Patient IMU-13", "demo:imu50:13"),
         ("IMU-00", "demo:imu50:00"),
         ("0", "demo:imu50:00"),
     ],
@@ -83,6 +86,8 @@ def test_resolve_unknown_and_ambiguous():
     with pytest.raises(AmbiguousPersonError) as exc:
         resolve_participant("2", ["demo:big_ideas:002", "demo:other:2"])
     assert len(exc.value.candidates) == 2
+    with pytest.raises(AmbiguousPersonError):
+        resolve_participant("imu50", KNOWN)  # more than one IMU participant
 
 
 # --- pure query --------------------------------------------------------------

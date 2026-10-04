@@ -21,6 +21,7 @@ import {
   useUnpinWidget,
   useWidgetData,
 } from "@/lib/api/queries"
+import { useMetrics } from "@/lib/catalog"
 
 type PinnedWidget = Schemas["PinnedWidget"]
 
@@ -40,7 +41,8 @@ function PinnedWidgetCard({
   pin: PinnedWidget
   audience: Audience
 }) {
-  const data = useWidgetData(pin.id)
+  const metrics = useMetrics()
+  const data = useWidgetData(pin.id, metrics.anyLive(pin.query.metrics ?? []))
   const unpin = useUnpinWidget()
   const compliance = data.data?.steps.find((s) => s.stage === "compliance")
 

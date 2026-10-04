@@ -34,3 +34,17 @@ class FeatureStat(_Frozen):
     mean: float
     stddev: float
     p50: float
+
+
+class LiveReading(_Frozen):
+    """One participant's newest sensor readings, refreshed every second.
+
+    `values` is keyed by `domain.metrics.LIVE_METRICS`. `analytics_window_end` is
+    the end of the newest published window, so a reader can tell when new
+    analytics have landed.
+    """
+
+    person_id: str
+    sensor_time: datetime
+    analytics_window_end: datetime | None
+    values: dict[str, float | None]

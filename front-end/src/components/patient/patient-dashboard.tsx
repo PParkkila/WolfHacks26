@@ -14,6 +14,7 @@ import { friendlyError } from "@/lib/api/client"
 import { useExplain, useParticipant, useSeries } from "@/lib/api/queries"
 import { GLUCO_CHANGE, GLUCO_SCORE, useMetrics } from "@/lib/catalog"
 import { useClock } from "@/lib/clock"
+import { useLiveReading } from "@/lib/live"
 import { formatReplayTime } from "@/lib/format"
 import type { Principal } from "@/lib/session"
 
@@ -47,6 +48,7 @@ export function PatientDashboard({ principal }: { principal: Principal }) {
   const { clock } = useClock()
   const metrics = useMetrics()
   const latest = useParticipant(me)
+  const live = useLiveReading(me)
   const explain = useExplain(me, 24)
   const score = useSeries({
     metrics: [GLUCO_SCORE],
@@ -141,7 +143,11 @@ export function PatientDashboard({ principal }: { principal: Principal }) {
         <SectionHeading
           id="vitals-heading"
           title="Your vitals"
-          description="The last 24 hours, compared with your own usual week."
+          description={
+            live
+              ? "Live from your wearable, and your last 24 hours compared with your usual week."
+              : "The last 24 hours, compared with your own usual week."
+          }
         />
         <div className="grid gap-4 @3xl/main:grid-cols-3">
           {ready
@@ -153,6 +159,15 @@ export function PatientDashboard({ principal }: { principal: Principal }) {
                   value={values[vital.metric]}
                   change={changeFor(vital.metric)}
                   week={sensorWeek.data}
+                  live={
+                    live
+                      ? {
+                          metric: vital.liveMetric,
+                          info: metrics.get(vital.liveMetric),
+                          value: live.values[vital.liveMetric] ?? null,
+                        }
+                      : undefined
+                  }
                 />
               ))
             : PRIMARY_VITALS.map((vital) => (

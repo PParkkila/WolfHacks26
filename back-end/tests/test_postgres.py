@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from agent.data.postgres import PostgresSource, to_window
+from agent.data.postgres import PostgresSource, to_live, to_window
 from agent.domain.metrics import GLUCO_CHANGE, GLUCO_SCORE
 
 END = datetime(2026, 10, 4, 7, tzinfo=UTC)
@@ -91,3 +91,47 @@ def test_write_check_names_the_table():
     source = Recorder([{"writable": False}])
     assert source.can_write() is False
     assert source.queries[0][1] == ("gold.dashboard_windows",) * 3
+
+
+LIVE_PAYLOAD = {
+    **PAYLOAD,
+    "window_end": "2026-10-04T13:45:00+00:00",
+    "latest_sensor_time": "2026-10-04T14:06:53+00:00",
+    "latest_hr_bpm": None,  # IMU: no heart-rate sensor
+    "latest_motion_g": 0.0188,
+    "latest_skin_temperature_c": "34.45",
+}
+
+
+def test_to_live_reads_sensor_time_and_keeps_missing_heart_rate():
+    reading = to_live("demo:imu50:13", LIVE_PAYLOAD, PUBLISHED)
+    assert reading.sensor_time == datetime(2026, 10, 4, 14, 6, 53, tzinfo=UTC)
+    assert reading.analytics_window_end == datetime(2026, 10, 4, 13, 45, tzinfo=UTC)
+    assert reading.values == {
+        "latest_hr_bpm": None,
+        "latest_motion_g": 0.0188,
+        "latest_skin_temperature_c": 34.45,
+    }
+    fallback = to_live("p", {}, PUBLISHED)
+    assert (fallback.sensor_time, fallback.analytics_window_end) == (PUBLISHED, None)
+
+
+def test_windows_carry_the_live_snapshot_too():
+    window = to_window("p", END, LIVE_PAYLOAD)
+    assert window.values["latest_motion_g"] == 0.0188
+
+
+def test_fetch_live_is_a_session_scoped_select_on_the_live_view():
+    row = {
+        "person_id": "demo:imu50:13",
+        "payload": LIVE_PAYLOAD,
+        "sensor_published_at": PUBLISHED,
+    }
+    source = Recorder([row])
+    [reading] = source.fetch_live()
+    query, params = source.queries[0]
+    assert '"gold"."dashboard_live"' in query
+    assert '"session_id" = %s' in query
+    assert query.endswith('ORDER BY "participant_key"')
+    assert params == ("s1",)
+    assert reading.person_id == "demo:imu50:13"

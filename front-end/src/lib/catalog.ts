@@ -7,7 +7,8 @@ import { useCatalog } from "@/lib/api/queries"
 
 export type MetricInfo = Schemas["MetricInfo"]
 
-// The model's outputs. Every other catalog metric is measured by the wearable.
+// The model's outputs. Every other catalog metric is measured by the wearable:
+// 24-hour summaries ("sensors") or seconds-old readings ("live").
 export const GLUCO_SCORE = "gluco_score"
 export const GLUCO_CHANGE = "gluco_change_24h"
 
@@ -21,9 +22,11 @@ export function useMetrics() {
       ready: catalog.isSuccess,
       list,
       sensors: list.filter(
-        (m) => m.name !== GLUCO_SCORE && m.name !== GLUCO_CHANGE
+        (m) => m.name !== GLUCO_SCORE && m.name !== GLUCO_CHANGE && !m.live
       ),
+      live: list.filter((m) => m.live),
       get: (name: string): MetricInfo | undefined => byName.get(name),
+      anyLive: (names: string[]) => names.some((n) => byName.get(n)?.live),
       label: (name: string) => byName.get(name)?.label ?? name,
     }
   }, [catalog.data, catalog.isSuccess])

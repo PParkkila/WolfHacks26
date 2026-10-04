@@ -2,7 +2,8 @@
 
 Most widgets need only `POST /query`; the rest are conveniences for the common
 cards. Every response is limited to what the caller may see and to windows that
-end at or before the replay clock's "now".
+end at or before the replay clock's "now"; live sensor readings ride on the
+newest window once the clock has reached it.
 """
 
 import asyncio
@@ -110,10 +111,11 @@ async def stream(
     svc: Queries,
     interval: Annotated[float, Query(ge=0.2, le=10)] = 1.0,
 ) -> EventSourceResponse:
-    """Push a `tick` whenever the clock moves, with the newly visible windows.
+    """Push a `tick` whenever the clock moves or the live readings change.
 
-    `reset` is true when the clock jumped backwards (a seek): the UI should re-run
-    its queries rather than append.
+    Each tick carries the newly visible windows and everyone visible's live
+    readings. `reset` is true when the clock jumped backwards (a seek): the UI
+    should re-run its queries rather than append.
     """
     clock = runtime.clock
 
@@ -122,7 +124,9 @@ async def stream(
         last_key: tuple[object, ...] | None = None
         while not await request.is_disconnected():
             state = await anyio.to_thread.run_sync(clock.state)
-            key = (state.now, state.playing, state.seconds_per_hour)
+            live = await anyio.to_thread.run_sync(svc.live_readings)
+            live_at = max((r.sensor_time for r in live), default=None)
+            key = (state.now, state.playing, state.seconds_per_hour, live_at)
             if key != last_key:
                 now = state.now
                 reset = last is not None and now is not None and now < last
@@ -136,6 +140,8 @@ async def stream(
                     "clock": state.model_dump(mode="json"),
                     "reset": reset,
                     "new_windows": [w.model_dump(mode="json") for w in fresh],
+                    "live_at": live_at.isoformat() if live_at else None,
+                    "live": [r.model_dump(mode="json") for r in live],
                 }
                 yield {"event": "tick", "data": json.dumps(payload)}
                 last, last_key = now, key

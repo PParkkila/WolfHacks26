@@ -4,7 +4,19 @@
     {
       "name": "api",
       "runtimeExecutable": "bash",
-      "runtimeArgs": ["-c", "cd back-end && uv run agent serve"],
+      "runtimeArgs": [
+        "-c",
+        "cd back-end && uv run agent serve"
+      ],
+      "port": 8000
+    },
+    {
+      "name": "api-demo",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "cd back-end && rm -f var/demo-sessions.sqlite && DATA_BACKEND=mock REPLAY_ENABLED=true SESSION_DB_PATH=var/demo-sessions.sqlite TRACE_PATH=var/demo-trace.jsonl uv run agent serve"
+      ],
       "port": 8000
     },
     {
@@ -13,6 +25,15 @@
       "runtimeArgs": [
         "-c",
         "cd front-end && export PATH=\"$HOME/.bun/bin:$HOME/.nvm/versions/node/v26.10.0/bin:$PATH\" && bun run dev"
+      ],
+      "port": 3000
+    },
+    {
+      "name": "web-demo",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "cd front-end && export PATH=\"$HOME/.bun/bin:$HOME/.nvm/versions/node/v26.10.0/bin:$PATH\" && bun run build && bun run start"
       ],
       "port": 3000
     }

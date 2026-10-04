@@ -1,0 +1,14 @@
+{
+  "name": "gluco-demo-video",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "tts": "uv run --no-project --python 3.12 --with kokoro-onnx --with soundfile python tts.py",
+    "record": "node record.mjs",
+    "build": "node build.mjs",
+    "all": "npm run tts && npm run record && npm run build"
+  },
+  "dependencies": {
+    "playwright": "1.64.0-alpha-1790635538000"
+  }
+}

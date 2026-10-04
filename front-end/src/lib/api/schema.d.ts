@@ -655,7 +655,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "trend" | "ranking" | "cohort_trend";
+            kind: "trend" | "ranking" | "cohort_trend" | "stat" | "table" | "heatmap";
             query: components["schemas"]["QuerySpec"];
             /**
              * Created At
@@ -791,7 +791,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "trend" | "ranking" | "cohort_trend";
+            kind: "trend" | "ranking" | "cohort_trend" | "stat" | "table" | "heatmap";
             query: components["schemas"]["QuerySpec"];
             /**
              * Created At
@@ -813,7 +813,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "trend" | "ranking" | "cohort_trend";
+            kind: "trend" | "ranking" | "cohort_trend" | "stat" | "table" | "heatmap";
             query: components["schemas"]["QuerySpec"];
         };
         /** WidgetStep */

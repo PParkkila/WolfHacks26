@@ -20,13 +20,16 @@ from agent.domain.errors import QueryError
 from agent.domain.metrics import metric_label
 from agent.query import QueryResult, QueryService, QuerySpec
 
-WidgetKind = Literal["trend", "ranking", "cohort_trend"]
+WidgetKind = Literal["trend", "ranking", "cohort_trend", "stat", "table", "heatmap"]
 Stage = Literal["design", "fetch", "compliance", "bind"]
 
 KIND_SHAPES: dict[WidgetKind, str] = {
     "trend": "Line chart",
     "ranking": "Ranked bars",
     "cohort_trend": "Panel average line",
+    "stat": "Stat tile",
+    "table": "Comparison table",
+    "heatmap": "Heatmap by day",
 }
 
 
@@ -59,11 +62,36 @@ def design(
     agg: str | None,
     order: str,
     limit: int,
+    panel: bool = False,
 ) -> QuerySpec:
-    """The query that draws `kind` well."""
+    """The query that draws `kind` well.
+
+    `panel` is true for a clinician, whose stat tile with no one named is the
+    panel average; a patient's QueryService only ever sees themselves anyway.
+    """
     participants = participants or None  # models send [] for "everyone"
     bucket = "hour" if hours <= 48 else "day"
-    if kind == "ranking":
+    if kind == "stat":
+        return QuerySpec(
+            metrics=metrics[:1],
+            participants=participants,
+            hours=hours,
+            bucket=bucket,
+            agg=agg or "mean",  # pyright: ignore[reportArgumentType]
+            group_by="cohort" if panel and participants is None else "participant",
+        )
+    if kind == "heatmap":
+        return QuerySpec(
+            metrics=metrics[:1],
+            participants=participants,
+            hours=hours,
+            bucket="day",
+            agg=agg or "mean",  # pyright: ignore[reportArgumentType]
+            sort_by=None if participants else metrics[0],
+            order=order,  # pyright: ignore[reportArgumentType]
+            limit=None if participants else limit,
+        )
+    if kind in ("ranking", "table"):
         return QuerySpec(
             metrics=metrics,
             participants=participants,

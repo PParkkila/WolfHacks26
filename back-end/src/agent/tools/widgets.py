@@ -35,7 +35,7 @@ def build_widget_tool(svc: QueryService) -> FunctionTool:
     @safe_tool
     def build_widget(
         title: str,
-        kind: Literal["trend", "ranking", "cohort_trend"],
+        kind: Literal["trend", "ranking", "cohort_trend", "stat", "table", "heatmap"],
         metrics: list[str],
         participants: list[str] | None = None,
         hours: float = 168,
@@ -51,10 +51,15 @@ def build_widget_tool(svc: QueryService) -> FunctionTool:
 
         Args:
             title: A short title, e.g. "Lowest Gluco Scores now".
-            kind: "trend" (values over time), "ranking" (who is highest or
-                lowest; sorted bars), or "cohort_trend" (the panel average over
-                time).
-            metrics: Metric names from the catalog; a ranking sorts by the first.
+            kind: "trend" (values over time, lines), "ranking" (who is highest
+                or lowest; sorted bars), "cohort_trend" (the panel average over
+                time), "stat" (one big current number with its change and a
+                sparkline; one metric; panel average unless you name a patient),
+                "table" (patients as rows, several metrics as columns, newest
+                values) or "heatmap" (patients by day for one metric; spot who
+                dipped when).
+            metrics: Metric names from the catalog. A ranking, table or heatmap
+                sorts by the first; a stat or heatmap uses only the first.
             participants: For "trend" or "ranking": who to include (short refs
                 are fine). Omit for the `limit` lowest (order="asc") or highest.
             hours: How far back from now (default 168, one week).
@@ -68,7 +73,9 @@ def build_widget_tool(svc: QueryService) -> FunctionTool:
         spec = widgets.WidgetSpec(
             title=title,
             kind=kind,
-            query=widgets.design(kind, metrics, participants, hours, agg, order, limit),
+            query=widgets.design(
+                kind, metrics, participants, hours, agg, order, limit, panel=True
+            ),
         )
         return _widget_result(svc, spec)
 
@@ -81,8 +88,9 @@ def build_my_widget_tool(svc: QueryService) -> FunctionTool:
     def build_my_widget(
         title: str,
         metrics: list[str],
+        kind: Literal["trend", "stat", "table"] = "trend",
         hours: float = 168,
-        agg: Literal["mean", "median", "min", "max"] | None = None,
+        agg: Literal["mean", "median", "min", "max", "last"] | None = None,
     ) -> dict[str, Any]:
         """Build a widget of your own readings over time, which you can pin to
         your page. Use when you're asked for a widget, or to track or keep an
@@ -94,13 +102,16 @@ def build_my_widget_tool(svc: QueryService) -> FunctionTool:
         Args:
             title: A short, friendly title, e.g. "My heart rate this week".
             metrics: Metric names from the catalog.
+            kind: "trend" (your values over time, a line), "stat" (one big
+                number with how it changed and a sparkline; uses the first
+                metric) or "table" (your newest value of several metrics).
             hours: How far back from now (default 168, one week).
             agg: How each hour or day is reduced (default "mean").
         """
         spec = widgets.WidgetSpec(
             title=title,
-            kind="trend",
-            query=widgets.design("trend", metrics, None, hours, agg, "asc", 1),
+            kind=kind,
+            query=widgets.design(kind, metrics, None, hours, agg, "asc", 1),
         )
         return _widget_result(svc, spec)
 

@@ -101,3 +101,63 @@ def test_patients_cannot_pin_cohort_views(client, as_patient):
         "query": {"metrics": [GLUCO_SCORE], "group_by": "cohort"},
     }
     assert client.post("/widgets", json=spec, headers=as_patient).status_code == 403
+
+
+async def test_every_clinician_widget_kind_builds(invoke_clinician):
+    cases = {
+        "trend": {"metrics": [GLUCO_SCORE], "participants": ["13"]},
+        "ranking": {"metrics": [GLUCO_SCORE]},
+        "cohort_trend": {"metrics": ["hr_mean_bpm_24h"]},
+        "stat": {"metrics": [GLUCO_SCORE]},
+        "table": {"metrics": [GLUCO_SCORE, "hr_mean_bpm_24h", "motion_mean_g"]},
+        "heatmap": {"metrics": [GLUCO_SCORE], "limit": 6},
+    }
+    for kind, args in cases.items():
+        out = await invoke_clinician("build_widget", title=kind, kind=kind, **args)
+        assert "error" not in out, (kind, out)
+        assert [s["stage"] for s in out["widget"]["steps"]] == STAGES
+        keys = [s["participant_id"] for s in out["chart"]["series"]]
+        assert not any(str(k).startswith("demo:") for k in keys), kind
+
+
+async def test_a_clinician_stat_defaults_to_the_panel_average(invoke_clinician):
+    panel = await invoke_clinician(
+        "build_widget", title="Panel", kind="stat", metrics=[GLUCO_SCORE]
+    )
+    assert panel["widget"]["query"]["group_by"] == "cohort"
+    one = await invoke_clinician(
+        "build_widget",
+        title="One",
+        kind="stat",
+        metrics=[GLUCO_SCORE],
+        participants=["13"],
+    )
+    assert one["widget"]["query"]["group_by"] == "participant"
+
+
+async def test_heatmap_is_patients_by_day(invoke_clinician):
+    out = await invoke_clinician(
+        "build_widget",
+        title="Heat",
+        kind="heatmap",
+        metrics=[GLUCO_SCORE],
+        limit=6,
+    )
+    assert out["widget"]["query"]["bucket"] == "day"
+    assert len(out["chart"]["series"]) == 6
+
+
+async def test_patient_widget_kinds_stay_on_their_own_data(invoke_patient):
+    for kind in ("trend", "stat", "table"):
+        out = await invoke_patient(
+            "build_my_widget",
+            title=kind,
+            kind=kind,
+            metrics=[GLUCO_SCORE, "hr_mean_bpm_24h"],
+        )
+        assert "error" not in out, (kind, out)
+        assert [s["participant_id"] for s in out["chart"]["series"]] == ["Patient 013"]
+    refused = await invoke_patient(
+        "build_my_widget", title="x", kind="heatmap", metrics=[GLUCO_SCORE]
+    )
+    assert "error" in refused or "heatmap" not in str(refused.get("widget"))

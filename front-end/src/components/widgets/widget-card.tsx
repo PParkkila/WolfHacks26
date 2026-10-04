@@ -11,7 +11,7 @@ import {
 import { toast } from "sonner"
 
 import type { Audience } from "@/components/estimate-note"
-import { QueryChart } from "@/components/query-chart"
+import { WidgetView } from "@/components/widgets/widget-view"
 import { Button } from "@/components/ui/button"
 import { friendlyError } from "@/lib/api/client"
 import type { ChatWidget, QueryResult, WidgetStep } from "@/lib/api/events"
@@ -111,14 +111,7 @@ export function WidgetCard({
           {pinned ? "Pinned" : "Pin"}
         </Button>
       </div>
-      <QueryChart
-        result={chart}
-        snapshot
-        hideNote
-        showTitles={chart.metrics.length > 1}
-        height={160}
-        audience={audience}
-      />
+      <WidgetView kind={widget.kind} result={chart} audience={audience} />
       <div className="border-t pt-2.5">
         <WidgetSteps steps={widget.steps} />
       </div>

@@ -4,7 +4,7 @@ import { PinOffIcon, ShieldCheckIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import type { Audience } from "@/components/estimate-note"
-import { QueryChart } from "@/components/query-chart"
+import { WidgetView } from "@/components/widgets/widget-view"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -28,6 +28,9 @@ const KIND_LABELS: Record<PinnedWidget["kind"], string> = {
   trend: "Trend",
   ranking: "Ranking",
   cohort_trend: "Panel trend",
+  stat: "Stat",
+  table: "Table",
+  heatmap: "Heatmap",
 }
 
 function PinnedWidgetCard({
@@ -66,13 +69,11 @@ function PinnedWidgetCard({
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
         {data.data ? (
-          <QueryChart
+          <WidgetView
+            kind={pin.kind}
             result={data.data.result}
-            snapshot
-            hideNote
-            showTitles={data.data.result.metrics.length > 1}
-            height={180}
             audience={audience}
+            height={180}
           />
         ) : data.isError ? (
           <p className="text-sm text-muted-foreground">

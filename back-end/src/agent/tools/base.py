@@ -2,7 +2,11 @@
 
 - Returns a JSON-able dict, never prose.
 - Carries `summary` and `rows` (read by the SSE layer for `tool_end`).
-- Carries `model_version` and the `window` it used.
+- Carries `model_version` and `window`. Single-person tools fill `window` with the
+  window they used; list tools carry it per row and leave `window` null.
+- Model output (`score`, `label`, `confidence`) is nulled, with `suppressed` true,
+  whenever the result is not reliable, so the model cannot quote what the policy
+  says is untrustworthy.
 - Caps rows at MAX_ROWS and says so when it truncates.
 - Never raises: a failure becomes `{"error": ...}` the agent can explain,
   because an exception would kill the stream mid-answer.
@@ -12,12 +16,13 @@ import functools
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from datetime import UTC, datetime
+from typing import Any, Self
 
 from agent.analysis.quality import ReliabilityPolicy
 from agent.assessment import Assessment, Assessor
 from agent.domain.models import RiskScore
-from agent.domain.ports import Repositories
+from agent.domain.ports import CohortStatsRepository, FeatureRepository, Repositories
 from agent.explanation import Explainer
 
 log = logging.getLogger(__name__)
@@ -27,16 +32,50 @@ MAX_ROWS = 200
 
 @dataclass(frozen=True)
 class ToolDeps:
-    repos: Repositories
-    policy: ReliabilityPolicy
+    """What tools are built from: services and read ports, never the whole backend."""
 
-    @property
-    def assessor(self) -> Assessor:
-        return Assessor(self.repos.risk, self.policy)
+    assessor: Assessor
+    explainer: Explainer
+    features: FeatureRepository
+    stats: CohortStatsRepository
 
-    @property
-    def explainer(self) -> Explainer:
-        return Explainer(self.repos.features, self.repos.stats)
+    @classmethod
+    def from_repos(cls, repos: Repositories, policy: ReliabilityPolicy) -> Self:
+        return cls(
+            assessor=Assessor(repos.risk, policy),
+            explainer=Explainer(repos.features, repos.stats),
+            features=repos.features,
+            stats=repos.stats,
+        )
+
+
+class PersonNotFoundError(LookupError):
+    """Raised inside a tool; `safe_tool` turns it into a `not_found` payload."""
+
+    def __init__(self, person_id: str) -> None:
+        super().__init__(person_id)
+        self.person_id = person_id
+
+
+def parse_window(window: str) -> datetime | None:
+    """`latest` -> None (the repository picks the newest); else an ISO window end.
+
+    Raises ValueError on anything else, which `safe_tool` reports as bad_argument.
+    """
+    if window.strip().lower() in ("", "latest"):
+        return None
+    parsed = datetime.fromisoformat(window)
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+
+def require_assessment(
+    assessor: Assessor, person_id: str, window: str = "latest"
+) -> Assessment:
+    """The assessed window; raises PersonNotFoundError if person or window is absent."""
+    assessment = assessor.assess(person_id, parse_window(window))
+    if assessment is None:
+        raise PersonNotFoundError(person_id)
+    return assessment
 
 
 def window_of(score: RiskScore) -> dict[str, str]:
@@ -87,7 +126,20 @@ def verdict_fields(assessment: Assessment) -> dict[str, Any]:
     return {
         "data_quality": assessment.quality.verdict,
         "reliable": assessment.reliable,
-        "abstain_reason": assessment.reliability.abstain_reason,
+        "abstain_reason": assessment.abstain_reason,
+    }
+
+
+def model_output(assessment: Assessment) -> dict[str, Any]:
+    """The model's score, label and confidence, or nulls when not reliable."""
+    if not assessment.reliable:
+        return {"score": None, "label": None, "confidence": None, "suppressed": True}
+    score = assessment.score
+    return {
+        "score": score.score,
+        "label": score.label,
+        "confidence": score.confidence,
+        "suppressed": False,
     }
 
 
@@ -102,6 +154,8 @@ def safe_tool[F: Callable[..., dict[str, Any]]](fn: F) -> F:
     def wrapper(*args: Any, **kwargs: Any) -> dict[str, Any]:
         try:
             return fn(*args, **kwargs)
+        except PersonNotFoundError as exc:
+            return not_found(exc.person_id)
         except ValueError as exc:
             return error("bad_argument", str(exc))
         except Exception as exc:

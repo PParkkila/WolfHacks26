@@ -11,8 +11,11 @@ def build_repositories(settings: Settings) -> Repositories:
         if settings.database_url is None:
             raise ValueError("DATA_BACKEND=postgres requires DATABASE_URL")
         backend = PostgresBackend(
-            settings.database_url.get_secret_value(), settings.statement_timeout_ms
+            settings.database_url.get_secret_value(),
+            settings.statement_timeout_ms,
+            settings.stats_ttl_s,
         )
+        backend.check_read_only()
     else:
         backend = MockBackend(seed=settings.mock_seed)
     return Repositories(risk=backend, features=backend, stats=backend, health=backend)

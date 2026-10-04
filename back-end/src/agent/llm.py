@@ -24,7 +24,7 @@ class LlmConnection:
 
     @classmethod
     def from_settings(cls, settings: Settings) -> "LlmConnection":
-        return cls(settings.gemini_api_key, settings.gemini_base_url)
+        return cls(settings.llm_api_key, settings.llm_base_url)
 
     def is_ready(self) -> bool:
         """True when a key is configured; never contacts the provider."""

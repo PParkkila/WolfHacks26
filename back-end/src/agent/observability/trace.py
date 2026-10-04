@@ -6,19 +6,26 @@ One line per turn: message, each tool call (args, rows, latency), answer, outcom
 
 import json
 import time
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
-from agent.domain.events import SseEvent
+from agent.domain.events import EventHandler, SseEvent
 
-Outcome = str  # ok | declined | max_turns | error
+# cancelled: the client disconnected before the turn finished.
+Outcome = Literal["ok", "declined", "max_turns", "error", "cancelled"]
 
 
 class TurnRecorder(Protocol):
     def record(self, event: SseEvent) -> None: ...
 
-    def finish(self, outcome: Outcome, error: str | None = None) -> None: ...
+    def finish(
+        self,
+        outcome: Outcome,
+        error: str | None = None,
+        ungrounded: Sequence[str] = (),
+    ) -> None: ...
 
 
 class Tracer(Protocol):
@@ -29,7 +36,12 @@ class _NullRecorder:
     def record(self, event: SseEvent) -> None:
         pass
 
-    def finish(self, outcome: Outcome, error: str | None = None) -> None:
+    def finish(
+        self,
+        outcome: Outcome,
+        error: str | None = None,
+        ungrounded: Sequence[str] = (),
+    ) -> None:
         pass
 
 
@@ -38,7 +50,7 @@ class NullTracer:
         return _NullRecorder()
 
 
-class _JsonlRecorder:
+class _JsonlRecorder(EventHandler):
     def __init__(self, path: Path, session_id: str, message: str) -> None:
         self._path = path
         self._session_id = session_id
@@ -46,25 +58,34 @@ class _JsonlRecorder:
         self._started = time.perf_counter()
         self._tokens: list[str] = []
         self._calls: list[dict[str, Any]] = []
-        self._open: dict[str, tuple[dict[str, Any], float]] = {}
+        self._open_calls: dict[str, tuple[dict[str, Any], float]] = {}
 
     def record(self, event: SseEvent) -> None:
-        now = time.perf_counter()
-        if event.name == "token":
-            self._tokens.append(event.data["text"])
-        elif event.name == "tool_start":
-            call = {"tool": event.data["tool"], "args": event.data["args"]}
-            self._calls.append(call)
-            self._open[event.data["call_id"]] = (call, now)
-        elif event.name == "tool_end":
-            call, started = self._open.pop(event.data["call_id"], ({}, now))
-            call.update(
-                rows=event.data["rows"],
-                summary=event.data["summary"],
-                latency_ms=round((now - started) * 1000),
-            )
+        self.handle(event)
 
-    def finish(self, outcome: Outcome, error: str | None = None) -> None:
+    def on_token(self, data: dict[str, Any]) -> None:
+        self._tokens.append(data["text"])
+
+    def on_tool_start(self, data: dict[str, Any]) -> None:
+        call = {"tool": data["tool"], "args": data["args"]}
+        self._calls.append(call)
+        self._open_calls[data["call_id"]] = (call, time.perf_counter())
+
+    def on_tool_end(self, data: dict[str, Any]) -> None:
+        now = time.perf_counter()
+        call, started = self._open_calls.pop(data["call_id"], ({}, now))
+        call.update(
+            rows=data["rows"],
+            summary=data["summary"],
+            latency_ms=round((now - started) * 1000),
+        )
+
+    def finish(
+        self,
+        outcome: Outcome,
+        error: str | None = None,
+        ungrounded: Sequence[str] = (),
+    ) -> None:
         line = {
             "ts": datetime.now(UTC).isoformat(),
             "session_id": self._session_id,
@@ -74,6 +95,7 @@ class _JsonlRecorder:
             "latency_ms": round((time.perf_counter() - self._started) * 1000),
             "outcome": outcome,
             "error": error,
+            "ungrounded_numbers": list(ungrounded),
         }
         self._path.parent.mkdir(parents=True, exist_ok=True)
         with self._path.open("a", encoding="utf-8") as handle:

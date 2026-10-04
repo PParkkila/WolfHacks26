@@ -25,7 +25,7 @@ def repos(backend: MockBackend) -> Repositories:
 
 @pytest.fixture(scope="session")
 def tools(repos: Repositories) -> dict[str, FunctionTool]:
-    built = build_tools(ToolDeps(repos=repos, policy=ReliabilityPolicy()))
+    built = build_tools(ToolDeps.from_repos(repos, ReliabilityPolicy()))
     return {tool.name: tool for tool in built}
 
 

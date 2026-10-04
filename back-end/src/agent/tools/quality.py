@@ -4,7 +4,13 @@ from typing import Any
 
 from agents import FunctionTool, function_tool
 
-from agent.tools.base import ToolDeps, not_found, result, safe_tool, window_of
+from agent.tools.base import (
+    ToolDeps,
+    require_assessment,
+    result,
+    safe_tool,
+    window_of,
+)
 
 
 def build(deps: ToolDeps) -> list[FunctionTool]:
@@ -22,9 +28,7 @@ def build(deps: ToolDeps) -> list[FunctionTool]:
         Args:
             person_id: The person's id, for example "P003".
         """
-        assessment = assessor.assess(person_id)
-        if assessment is None:
-            return not_found(person_id)
+        assessment = require_assessment(assessor, person_id)
         score, quality = assessment.score, assessment.quality
         return result(
             summary=f"{person_id}: data quality {quality.verdict}",

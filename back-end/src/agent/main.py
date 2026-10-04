@@ -4,23 +4,36 @@ import argparse
 import asyncio
 import sys
 import uuid
+from typing import Any
 
 import uvicorn
+
+from agent.domain.events import EventHandler
+
+
+class _Printer(EventHandler):
+    """The answer goes to stdout; tool calls and errors go to stderr."""
+
+    def on_token(self, data: dict[str, Any]) -> None:
+        print(data["text"], end="", flush=True)
+
+    def on_tool_start(self, data: dict[str, Any]) -> None:
+        print(f"\n  [{data['tool']} {data['args']}]", file=sys.stderr)
+
+    def on_tool_end(self, data: dict[str, Any]) -> None:
+        print(f"  [-> {data['summary']}]", file=sys.stderr)
+
+    def on_error(self, data: dict[str, Any]) -> None:
+        print(f"\n[error] {data['message']}", file=sys.stderr)
 
 
 async def _ask(question: str, session_id: str) -> None:
     from agent.bootstrap import build_runtime
 
     runtime = build_runtime()
+    printer = _Printer()
     async for event in runtime.chat.stream(session_id, question):
-        if event.name == "token":
-            print(event.data["text"], end="", flush=True)
-        elif event.name == "tool_start":
-            print(f"\n  [{event.data['tool']} {event.data['args']}]", file=sys.stderr)
-        elif event.name == "tool_end":
-            print(f"  [-> {event.data['summary']}]", file=sys.stderr)
-        elif event.name == "error":
-            print(f"\n[error] {event.data['message']}", file=sys.stderr)
+        printer.handle(event)
     print()
 
 

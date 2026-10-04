@@ -10,11 +10,12 @@ from typing import Any
 
 from agents import Agent, InputGuardrailTripwireTriggered, MaxTurnsExceeded, Runner
 
+from agent.analysis.grounding import ungrounded_numbers
 from agent.api.sessions import SessionFactory
 from agent.api.sse import StreamTranslator
 from agent.domain.events import SseEvent
 from agent.guardrails import decline_message
-from agent.observability.trace import Tracer
+from agent.observability.trace import Outcome, Tracer
 
 log = logging.getLogger(__name__)
 
@@ -44,7 +45,10 @@ class ChatService:
     async def stream(self, session_id: str, message: str) -> AsyncIterator[SseEvent]:
         recorder = self._tracer.start(session_id, message)
         translator = StreamTranslator()
-        outcome, failure = "cancelled", None  # stays so if the client disconnects
+        outcome: Outcome = "cancelled"  # stays so if the client disconnects
+        failure: str | None = None
+        answer: list[str] = []
+        ungrounded: list[str] = []
         pending: list[SseEvent] = []
         try:
             try:
@@ -57,12 +61,18 @@ class ChatService:
                 async for raw in result.stream_events():
                     for event in translator.translate(raw):
                         recorder.record(event)
+                        if event.name == "token":
+                            answer.append(event.data["text"])
                         yield event
                 outcome = "ok"
+                ungrounded = ungrounded_numbers(
+                    "".join(answer), message, *translator.tool_outputs
+                )
+                if ungrounded:
+                    log.warning("answer states ungrounded numbers: %s", ungrounded)
             except InputGuardrailTripwireTriggered as exc:
                 outcome = "declined"
-                info = exc.guardrail_result.output.output_info
-                pending.append(SseEvent("token", {"text": decline_message(info)}))
+                pending.append(SseEvent("token", {"text": decline_message(exc)}))
             except MaxTurnsExceeded:
                 outcome = "max_turns"
                 pending.append(SseEvent("token", {"text": MAX_TURNS_REPLY}))
@@ -79,9 +89,12 @@ class ChatService:
                     )
                 )
 
-            pending.append(SseEvent("done", {"session_id": session_id}))
+            done: dict[str, Any] = {"session_id": session_id}
+            if ungrounded:  # additive: absent unless the check found something
+                done["ungrounded_numbers"] = ungrounded
+            pending.append(SseEvent("done", done))
             for event in pending:
                 recorder.record(event)
                 yield event
         finally:
-            recorder.finish(outcome, failure)
+            recorder.finish(outcome, failure, ungrounded)

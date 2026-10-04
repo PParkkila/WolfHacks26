@@ -33,7 +33,7 @@ def build_runtime(settings: Settings | None = None) -> Runtime:
     llm.configure()
 
     repos = build_repositories(settings)
-    tools = build_tools(ToolDeps(repos=repos, policy=ReliabilityPolicy()))
+    tools = build_tools(ToolDeps.from_repos(repos, ReliabilityPolicy()))
     agent = build_agent(
         model=settings.agent_model,
         tools=tools,

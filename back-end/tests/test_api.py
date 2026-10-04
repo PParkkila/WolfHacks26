@@ -16,8 +16,12 @@ class FakeChat:
         yield SseEvent("done", {"session_id": session_id})
 
 
+ALLOWED = "http://localhost:5173"
+
+
 def make_client(repos, tools) -> TestClient:
     runtime = SimpleNamespace(
+        settings=SimpleNamespace(allowed_origins=[ALLOWED]),
         llm=SimpleNamespace(is_ready=lambda: True),
         repos=repos,
         tools=list(tools.values()),
@@ -67,12 +71,17 @@ def test_chat_validates_request(repos, tools):
     )
 
 
-def test_cors_is_open(repos, tools):
+def test_cors_preflight_for_chat_is_allowed_from_a_configured_origin(repos, tools):
     r = make_client(repos, tools).options(
         "/chat",
-        headers={
-            "Origin": "http://localhost:5173",
-            "Access-Control-Request-Method": "POST",
-        },
+        headers={"Origin": ALLOWED, "Access-Control-Request-Method": "POST"},
     )
-    assert r.headers["access-control-allow-origin"] == "*"
+    assert r.headers["access-control-allow-origin"] == ALLOWED
+
+
+def test_cors_allows_only_the_configured_origins(repos, tools):
+    client = make_client(repos, tools)
+    ok = client.get("/health", headers={"Origin": ALLOWED})
+    assert ok.headers["access-control-allow-origin"] == ALLOWED
+    other = client.get("/health", headers={"Origin": "https://evil.example"})
+    assert "access-control-allow-origin" not in other.headers

@@ -1,9 +1,9 @@
 """Run evals/cases.yaml through the real agent stack and report pass/fail.
 
-Uses the real model (needs GEMINI_API_KEY and AGENT_MODEL) and whichever
+Uses the real model (needs LLM_API_KEY and AGENT_MODEL) and whichever
 DATA_BACKEND is configured; the seeded cases assume the mock backend.
 
-    uv run python evals/run.py [--tier 2] [--only 9 10 11]
+    uv run python evals/run.py [--tier 2] [--only 9 10 11] [--include-planned]
 """
 
 import argparse
@@ -14,23 +14,26 @@ import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import yaml
 
 from agent.bootstrap import Runtime, build_runtime
+from agent.domain.events import EventHandler
 
 CASES_PATH = Path(__file__).parent / "cases.yaml"
 PERSON_ID = re.compile(r"\bP\d{3}\b")
 
 
 @dataclass
-class Outcome:
+class CaseOutcome:
     case_id: int
     question: str
     tools: list[str]
     answer: str
     seconds: float
     failures: list[str]
+    ungrounded: list[str]
 
     @property
     def passed(self) -> bool:
@@ -66,33 +69,54 @@ def check(case: dict, tools: list[str], answer: str) -> list[str]:
     return failures
 
 
-async def run_case(runtime: Runtime, case: dict) -> Outcome:
+class _Collector(EventHandler):
+    """What an eval asserts on: tools called, the answer text, ungrounded numbers."""
+
+    def __init__(self) -> None:
+        self.tools: list[str] = []
+        self.tokens: list[str] = []
+        self.ungrounded: list[str] = []
+
+    def on_tool_start(self, data: dict[str, Any]) -> None:
+        self.tools.append(data["tool"])
+
+    def on_token(self, data: dict[str, Any]) -> None:
+        self.tokens.append(data["text"])
+
+    def on_error(self, data: dict[str, Any]) -> None:
+        self.tokens.append(f"[error: {data['message']}]")
+
+    def on_done(self, data: dict[str, Any]) -> None:
+        self.ungrounded = data.get("ungrounded_numbers", [])
+
+
+async def run_case(runtime: Runtime, case: dict) -> CaseOutcome:
     started = time.perf_counter()
-    tools: list[str] = []
-    tokens: list[str] = []
+    collector = _Collector()
     async for event in runtime.chat.stream(
         f"eval-{uuid.uuid4().hex}", case["question"]
     ):
-        if event.name == "tool_start":
-            tools.append(event.data["tool"])
-        elif event.name == "token":
-            tokens.append(event.data["text"])
-        elif event.name == "error":
-            tokens.append(f"[error: {event.data['message']}]")
-    answer = "".join(tokens)
-    return Outcome(
+        collector.handle(event)
+    answer = "".join(collector.tokens)
+    failures = check(case, collector.tools, answer)
+    if collector.ungrounded:
+        failures.append(f"numbers not found in any tool result: {collector.ungrounded}")
+    return CaseOutcome(
         case["id"],
         case["question"],
-        tools,
+        collector.tools,
         answer,
         time.perf_counter() - started,
-        check(case, tools, answer),
+        failures,
+        collector.ungrounded,
     )
 
 
 async def main(args: argparse.Namespace) -> int:
     cases = yaml.safe_load(CASES_PATH.read_text(encoding="utf-8"))
     cases = [c for c in cases if c["tier"] <= args.tier]
+    if not args.include_planned:
+        cases = [c for c in cases if not c.get("planned")]
     if args.only:
         cases = [c for c in cases if c["id"] in args.only]
     runtime = build_runtime()
@@ -115,5 +139,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--tier", type=int, default=1, help="run cases up to this tier")
     parser.add_argument("--only", type=int, nargs="*", help="case ids to run")
+    parser.add_argument(
+        "--include-planned",
+        action="store_true",
+        help="also run cases that need tools that do not exist yet",
+    )
     parser.add_argument("-v", "--verbose", action="store_true")
     sys.exit(asyncio.run(main(parser.parse_args())))

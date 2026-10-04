@@ -20,7 +20,8 @@ from agent.domain.ports import CohortStatsRepository, FeatureRepository
 METHOD = "cohort_deviation"
 CAVEAT = (
     "These are cohort deviations: how unusual each value is for this person. "
-    "They are associations, not model attributions or causes."
+    "They are associations, not model attributions or causes. The score is a "
+    "model estimate, not a measurement or a diagnosis."
 )
 
 
@@ -54,12 +55,12 @@ class Explainer:
         self._top_n = top_n
 
     def explain(self, assessment: Assessment) -> Explanation | Withheld | NoFeatures:
-        reason = assessment.reliability.abstain_reason
+        reason = assessment.abstain_reason
         if reason is not None:
             return Withheld(reason)
 
         score = assessment.score
-        vector = self._features.get_features(score.person_id, score.window_end)
+        vector = self._features.get_features(score.key)
         if vector is None:
             return NoFeatures()
 

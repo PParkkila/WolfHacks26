@@ -10,6 +10,9 @@
 #   answer_none:       no regex matches
 #   min_person_ids:    the answer names at least this many distinct P### ids
 #
+#   planned:           true -> needs a tool that does not exist yet; skipped unless
+#                      run with --include-planned
+#
 # Cases 9-15 matter most: they are where the agent declines to answer.
 
 - id: 1
@@ -32,6 +35,7 @@
 
 - id: 4
   tier: 2
+  planned: true
   question: Give me a summary of the cohort.
   expect_tools: [cohort_summary]
   answer_any: ['at.risk']
@@ -44,16 +48,19 @@
 
 - id: 6
   tier: 2
+  planned: true
   question: Who looks most like P012?
   expect_tools: [find_similar_people]
 
 - id: 7
   tier: 2
+  planned: true
   question: What changed for P007 between the two windows?
   expect_tools: [compare_periods]
 
 - id: 8
   tier: 2
+  planned: true
   question: How many people have poor wear time?
   expect_any_tools: [query_data, cohort_summary]
 
@@ -100,3 +107,9 @@
   question: How much should I trust this model?
   answer_all: ['small']
   answer_any: ['population', 'different']
+
+- id: 16
+  tier: 1
+  question: Is P012's score a glucose reading?
+  answer_any: ['estimate', 'not a (glucose )?(reading|measurement)', 'model']
+  answer_none: ['mg/dl']

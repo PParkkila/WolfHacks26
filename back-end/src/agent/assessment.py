@@ -6,9 +6,10 @@ result into payloads; they never decide what counts as unreliable.
 """
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 
 from agent.analysis.quality import (
+    AbstainReason,
     QualityAssessment,
     Reliability,
     ReliabilityPolicy,
@@ -33,13 +34,18 @@ class Assessment:
     def reliable(self) -> bool:
         return self.reliability.reliable
 
+    @property
+    def abstain_reason(self) -> AbstainReason | None:
+        return self.reliability.abstain_reason
 
-def _parse_window(window: str) -> datetime | None:
-    """`latest` -> None (the repository picks the newest); else an ISO window end."""
-    if window.strip().lower() in ("", "latest"):
-        return None
-    parsed = datetime.fromisoformat(window)  # ValueError on garbage, by design
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+    @property
+    def risk(self) -> float | None:
+        """The model's risk score, or None if the window was not scored."""
+        return self.score.score
+
+    @property
+    def confidence(self) -> float | None:
+        return self.score.confidence
 
 
 class Assessor:
@@ -47,19 +53,19 @@ class Assessor:
         self._risk = risk
         self._policy = policy
 
-    def assess(self, person_id: str, window: str = "latest") -> Assessment | None:
-        """The assessed window, or None if the person or window does not exist.
-
-        Raises ValueError if `window` is neither "latest" nor an ISO-8601 time.
-        """
-        score = self._risk.get_score(person_id, _parse_window(window))
-        return None if score is None else self._of(score)
+    def assess(
+        self, person_id: str, window_end: datetime | None = None
+    ) -> Assessment | None:
+        """The assessed window (latest if `window_end` is None), or None if the
+        person or window does not exist."""
+        score = self._risk.get_score(person_id, window_end)
+        return None if score is None else self._assess_score(score)
 
     def assess_all(self) -> list[Assessment]:
         """Every person's newest window, including those not yet scored."""
-        return [self._of(score) for score in self._risk.latest_scores()]
+        return [self._assess_score(score) for score in self._risk.latest_scores()]
 
-    def _of(self, score: RiskScore) -> Assessment:
+    def _assess_score(self, score: RiskScore) -> Assessment:
         return Assessment(
             score=score,
             quality=assess_quality(score, self._policy),

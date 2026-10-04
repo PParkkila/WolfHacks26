@@ -10,7 +10,8 @@ from agent.tools.base import (
     ToolDeps,
     cap_rows,
     error,
-    not_found,
+    model_output,
+    require_assessment,
     result,
     safe_tool,
     verdict_fields,
@@ -34,33 +35,34 @@ def build(deps: ToolDeps) -> list[FunctionTool]:
 
         Also returns wear time, the data-quality verdict, and whether the result
         is reliable enough to support a judgement (`reliable`, `abstain_reason`).
+        When it is not reliable, `score`, `label` and `confidence` are null and
+        `suppressed` is true: there is no finding to report.
 
         Args:
             person_id: The person's id, for example "P012".
             window: "latest" (default) or an ISO-8601 window end timestamp.
         """
-        assessment = assessor.assess(person_id, window)
-        if assessment is None:
-            return not_found(person_id)
+        assessment = require_assessment(assessor, person_id, window)
         score = assessment.score
-        scored = score.score is not None
-        return result(
-            summary=(
+        if score.score is None:
+            summary = f"{person_id}: not yet scored"
+        elif not assessment.reliable:
+            summary = f"{person_id}: result withheld ({assessment.abstain_reason})"
+        else:
+            summary = (
                 f"{person_id}: {score.label} (score {score.score}, "
                 f"confidence {score.confidence})"
-                if scored
-                else f"{person_id}: not yet scored"
-            ),
+            )
+        return result(
+            summary=summary,
             rows=1,
             model_version=score.model_version,
             window=window_of(score),
             person_id=person_id,
-            scored=scored,
-            score=score.score,
-            label=score.label,
-            confidence=score.confidence,
+            scored=score.score is not None,
             wear_time_hours=score.wear_time_hours,
             missing_signal_pct=score.missing_signal_pct,
+            **model_output(assessment),
             **verdict_fields(assessment),
         )
 
@@ -79,9 +81,7 @@ def build(deps: ToolDeps) -> list[FunctionTool]:
         Args:
             person_id: The person's id, for example "P012".
         """
-        assessment = assessor.assess(person_id)
-        if assessment is None:
-            return not_found(person_id)
+        assessment = require_assessment(assessor, person_id)
         score = assessment.score
         window = window_of(score)
 
@@ -92,6 +92,7 @@ def build(deps: ToolDeps) -> list[FunctionTool]:
                     rows=0,
                     model_version=score.model_version,
                     window=window,
+                    person_id=person_id,
                     method=METHOD,
                     abstain=True,
                     abstain_reason=reason,
@@ -111,9 +112,7 @@ def build(deps: ToolDeps) -> list[FunctionTool]:
                     window=window,
                     method=METHOD,
                     person_id=person_id,
-                    label=score.label,
-                    score=score.score,
-                    confidence=score.confidence,
+                    **model_output(assessment),
                     top_features=[_rounded(d.model_dump()) for d in deviations],
                     tension=tension.present,
                     aligned_with_at_risk_group=tension.aligned,
@@ -126,8 +125,9 @@ def build(deps: ToolDeps) -> list[FunctionTool]:
     def rank_candidates(top_k: int = 10, min_confidence: float = 0.0) -> dict[str, Any]:
         """Rank scored people by risk score, highest first.
 
-        Each row says whether the result is `reliable`; unreliable rows should be
-        flagged, not presented as firm candidates.
+        Only people whose result is reliable are ranked. Scored people whose
+        result is not reliable are listed under `unranked` with the reason and
+        no score: they are not candidates, and the answer should say so.
 
         Args:
             top_k: How many people to return (1-200).
@@ -135,32 +135,42 @@ def build(deps: ToolDeps) -> list[FunctionTool]:
         """
         if not 1 <= top_k <= MAX_ROWS:
             raise ValueError(f"top_k must be between 1 and {MAX_ROWS}")
-        scored = [
-            a
-            for a in assessor.assess_all()
-            if a.score.score is not None
-            and (a.score.confidence or 0.0) >= min_confidence
+        scored = [a for a in assessor.assess_all() if a.risk is not None]
+        ranked = [
+            a for a in scored if a.reliable and (a.confidence or 0.0) >= min_confidence
         ]
-        scored.sort(key=lambda a: (-(a.score.score or 0.0), a.person_id))
-        rows, truncation = cap_rows(scored[:top_k])
+        ranked.sort(key=lambda a: (-(a.risk or 0.0), a.person_id))
+        rows = ranked[:top_k]
+        unranked, unranked_cap = cap_rows([a for a in scored if not a.reliable])
         return result(
-            summary=f"Top {len(rows)} of {len(scored)} scored people by risk score",
+            summary=(
+                f"Top {len(rows)} of {len(ranked)} ranked people by risk score; "
+                f"{len(unranked)} scored people not ranked (unreliable)"
+            ),
             rows=len(rows),
             model_version=rows[0].score.model_version if rows else None,
             candidates=[
                 {
                     "rank": rank,
                     "person_id": a.person_id,
-                    "score": a.score.score,
+                    "score": a.risk,
                     "label": a.score.label,
-                    "confidence": a.score.confidence,
-                    "window_end": a.score.window_end.isoformat(),
+                    "confidence": a.confidence,
+                    "window": window_of(a.score),
                     **verdict_fields(a),
                 }
                 for rank, a in enumerate(rows, start=1)
             ],
             scored_people=len(scored),
-            **truncation,
+            unranked=[
+                {
+                    "person_id": a.person_id,
+                    "window": window_of(a.score),
+                    **verdict_fields(a),
+                }
+                for a in unranked
+            ],
+            **{f"unranked_{key}": value for key, value in unranked_cap.items()},
         )
 
     return [get_risk_label, explain_risk, rank_candidates]

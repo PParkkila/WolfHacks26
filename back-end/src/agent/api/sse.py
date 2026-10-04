@@ -15,6 +15,17 @@ TEXT_DELTA = "response.output_text.delta"
 SUMMARY_LIMIT = 300
 
 
+def sse_frame(event: SseEvent) -> dict[str, str]:
+    """Shape accepted by sse-starlette: `event:` name plus a JSON `data:` line.
+
+    `type` is repeated inside the payload so a client can dispatch on either.
+    """
+    return {
+        "event": event.name,
+        "data": json.dumps({"type": event.name, **event.data}),
+    }
+
+
 def _field(obj: Any, name: str) -> Any:
     return obj.get(name) if isinstance(obj, dict) else getattr(obj, name, None)
 
@@ -37,8 +48,9 @@ class StreamTranslator:
     """
 
     def __init__(self) -> None:
-        self._open: dict[str, str] = {}  # call_id -> tool, oldest first
+        self._open_calls: dict[str, str] = {}  # call_id -> tool, oldest first
         self._generated = 0
+        self.tool_outputs: list[Any] = []  # every result seen, for grounding checks
 
     def translate(self, event: StreamEvent) -> list[SseEvent]:
         if isinstance(event, RawResponsesStreamEvent):
@@ -59,7 +71,7 @@ class StreamTranslator:
         if not call_id:
             self._generated += 1
             call_id = f"call-{self._generated}"
-        self._open[call_id] = tool
+        self._open_calls[call_id] = tool
         return SseEvent(
             "tool_start",
             {
@@ -71,11 +83,12 @@ class StreamTranslator:
 
     def _tool_end(self, item: Any) -> SseEvent:
         call_id = _field(item.raw_item, "call_id")
-        if call_id not in self._open:
+        if call_id not in self._open_calls:
             # No usable id on the result: pair with the oldest open call, if any.
-            call_id = next(iter(self._open), call_id or "unknown")
-        tool = self._open.pop(call_id, "unknown")
+            call_id = next(iter(self._open_calls), call_id or "unknown")
+        tool = self._open_calls.pop(call_id, "unknown")
         output = item.output
+        self.tool_outputs.append(output)
         if isinstance(output, dict):
             summary = output.get("summary") or output.get("error") or ""
             rows = output.get("rows", 0)

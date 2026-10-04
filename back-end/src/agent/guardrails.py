@@ -5,18 +5,22 @@ second layer. The API layer turns a tripped guardrail into a normal short reply
 (not an `error` event) using `decline_message`.
 """
 
+import logging
 from typing import Literal
 
 from agents import (
     Agent,
     GuardrailFunctionOutput,
     InputGuardrail,
+    InputGuardrailTripwireTriggered,
     RunContextWrapper,
     Runner,
     TResponseInputItem,
     input_guardrail,
 )
 from pydantic import BaseModel
+
+log = logging.getLogger(__name__)
 
 Category = Literal["diagnosis", "treatment", "identification", "none"]
 
@@ -29,7 +33,7 @@ Classify the user's message for a wearable-sensor screening tool.
   data quality.
 Answer with the single best category."""
 
-DECLINE_MESSAGES: dict[str, str] = {
+DECLINE_MESSAGES: dict[Category, str] = {
     "diagnosis": (
         "I can't diagnose anyone. What I can say is whether the screening model "
         "flags a person for follow-up testing, how confident it is, and how "
@@ -52,11 +56,17 @@ class GuardrailVerdict(BaseModel):
     category: Category
 
 
-def decline_message(verdict: GuardrailVerdict | object) -> str:
-    category = (
-        verdict.category if isinstance(verdict, GuardrailVerdict) else "diagnosis"
-    )
-    return DECLINE_MESSAGES.get(category, DECLINE_MESSAGES["diagnosis"])
+def decline_message(tripwire: InputGuardrailTripwireTriggered) -> str:
+    """The reply for a tripped guardrail.
+
+    An unrecognised verdict declines as "diagnosis", the most conservative reply,
+    and says so in the log rather than hiding it.
+    """
+    info = tripwire.guardrail_result.output.output_info
+    if isinstance(info, GuardrailVerdict) and info.category in DECLINE_MESSAGES:
+        return DECLINE_MESSAGES[info.category]
+    log.warning("guardrail tripped without a known verdict: %r", info)
+    return DECLINE_MESSAGES["diagnosis"]
 
 
 def build_input_guardrails(model: str) -> list[InputGuardrail]:

@@ -10,6 +10,7 @@ from agent.tools.base import (
     ToolDeps,
     error,
     not_found,
+    require_assessment,
     result,
     safe_tool,
     verdict_fields,
@@ -18,7 +19,7 @@ from agent.tools.base import (
 
 
 def build(deps: ToolDeps) -> list[FunctionTool]:
-    repos, assessor = deps.repos, deps.assessor
+    assessor, features, cohort = deps.assessor, deps.features, deps.stats
 
     @function_tool
     @safe_tool
@@ -32,15 +33,13 @@ def build(deps: ToolDeps) -> list[FunctionTool]:
             person_id: The person's id, for example "P012".
             feature: Exact feature name, for example "resting_hr_bpm".
         """
-        assessment = assessor.assess(person_id)
-        if assessment is None:
-            return not_found(person_id)
+        assessment = require_assessment(assessor, person_id)
         score = assessment.score
-        vector = repos.features.get_features(person_id, score.window_end)
+        vector = features.get_features(score.key)
         if vector is None:
             return not_found(person_id)
 
-        stats = repos.stats.feature_stats("all")
+        stats = cohort.feature_stats("all")
         if feature not in stats:
             return error(
                 "unknown_feature",

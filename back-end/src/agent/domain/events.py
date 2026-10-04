@@ -1,6 +1,5 @@
 """Contract B event vocabulary, independent of the SDK and of HTTP framing."""
 
-import json
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -12,12 +11,38 @@ class SseEvent:
     name: EventName
     data: dict[str, Any] = field(default_factory=dict)
 
-    def to_sse(self) -> dict[str, str]:
-        """Shape accepted by sse-starlette: `event:` name plus a JSON `data:` line.
 
-        `type` is repeated inside the payload so a client can dispatch on either.
-        """
-        return {
-            "event": self.name,
-            "data": json.dumps({"type": self.name, **self.data}),
-        }
+class EventHandler:
+    """Consumes Contract B events. Override the `on_*` hooks you care about.
+
+    `handle` is the one place that switches on `event.name`, so adding an event
+    kind touches this class instead of every consumer.
+    """
+
+    def handle(self, event: SseEvent) -> None:
+        match event.name:
+            case "token":
+                self.on_token(event.data)
+            case "tool_start":
+                self.on_tool_start(event.data)
+            case "tool_end":
+                self.on_tool_end(event.data)
+            case "error":
+                self.on_error(event.data)
+            case "done":
+                self.on_done(event.data)
+
+    def on_token(self, data: dict[str, Any]) -> None:
+        pass
+
+    def on_tool_start(self, data: dict[str, Any]) -> None:
+        pass
+
+    def on_tool_end(self, data: dict[str, Any]) -> None:
+        pass
+
+    def on_error(self, data: dict[str, Any]) -> None:
+        pass
+
+    def on_done(self, data: dict[str, Any]) -> None:
+        pass

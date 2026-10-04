@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, StringConstraints
 from sse_starlette.sse import EventSourceResponse
 
+from agent.api.sse import sse_frame
 from agent.bootstrap import Runtime, build_runtime
 
 log = logging.getLogger(__name__)
@@ -26,16 +27,18 @@ class ChatRequest(BaseModel):
 
 def create_app(runtime: Runtime) -> FastAPI:
     app = FastAPI(title="PulseCast agent")
-    # Wide open for the hackathon, as per the plan.
     app.add_middleware(
-        CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
+        CORSMiddleware,
+        allow_origins=runtime.settings.allowed_origins,
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
 
     @app.post("/chat")
     async def chat(request: ChatRequest) -> EventSourceResponse:
         async def events():
             async for event in runtime.chat.stream(request.session_id, request.message):
-                yield event.to_sse()
+                yield sse_frame(event)
 
         return EventSourceResponse(events(), headers=SSE_HEADERS)
 

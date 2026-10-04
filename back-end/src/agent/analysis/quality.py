@@ -10,12 +10,19 @@ AbstainReason = Literal["not_scored", "insufficient_data_quality", "low_confiden
 
 
 @dataclass(frozen=True)
+class Bounds:
+    """The two cut-offs of one quality measure: past `marginal` is a warning, past
+    `insufficient` rules the data out. Which side is "past" is the caller's call."""
+
+    insufficient: float
+    marginal: float
+
+
+@dataclass(frozen=True)
 class ReliabilityPolicy:
     min_confidence: float = 0.6
-    insufficient_wear_hours: float = 10.0
-    marginal_wear_hours: float = 16.0
-    insufficient_missing_pct: float = 50.0
-    marginal_missing_pct: float = 25.0
+    wear_hours: Bounds = Bounds(insufficient=10.0, marginal=16.0)  # below is worse
+    missing_pct: Bounds = Bounds(insufficient=50.0, marginal=25.0)  # above is worse
 
 
 @dataclass(frozen=True)
@@ -40,17 +47,17 @@ def assess_quality(score: RiskScore, policy: ReliabilityPolicy) -> QualityAssess
 
     insufficient: list[str] = []
     marginal: list[str] = []
-    if wear < policy.insufficient_wear_hours:
+    if wear < policy.wear_hours.insufficient:
         insufficient.append(
-            f"wear time {wear:.1f}h is below {policy.insufficient_wear_hours:g}h"
+            f"wear time {wear:.1f}h is below {policy.wear_hours.insufficient:g}h"
         )
-    elif wear < policy.marginal_wear_hours:
+    elif wear < policy.wear_hours.marginal:
         marginal.append(
-            f"wear time {wear:.1f}h is below {policy.marginal_wear_hours:g}h"
+            f"wear time {wear:.1f}h is below {policy.wear_hours.marginal:g}h"
         )
-    if missing > policy.insufficient_missing_pct:
+    if missing > policy.missing_pct.insufficient:
         insufficient.append(f"{missing:.0f}% of the window has no sensor data")
-    elif missing > policy.marginal_missing_pct:
+    elif missing > policy.missing_pct.marginal:
         marginal.append(f"{missing:.0f}% of the window has no sensor data")
 
     if insufficient:

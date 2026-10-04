@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 import pytest
 
 from agent.analysis.quality import ReliabilityPolicy
@@ -38,17 +40,12 @@ def test_unreliable_people_carry_the_reason(assessor, person, reason):
 
 def test_window_selects_an_earlier_scoring_window(assessor):
     latest = assessor.assess("P007")
-    previous = assessor.assess("P007", "2026-10-01T00:00:00Z")
+    previous = assessor.assess("P007", datetime(2026, 10, 1, tzinfo=UTC))
     assert latest is not None
     assert previous is not None
     assert latest.score.label == "at_risk"
     assert previous.score.label == "not_at_risk"
-    assert assessor.assess("P007", "2020-01-01T00:00:00Z") is None
-
-
-def test_bad_window_raises_value_error(assessor):
-    with pytest.raises(ValueError, match="Invalid isoformat"):
-        assessor.assess("P007", "garbage")
+    assert assessor.assess("P007", datetime(2020, 1, 1, tzinfo=UTC)) is None
 
 
 def test_assess_all_includes_unscored_people(assessor):

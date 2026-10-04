@@ -1,6 +1,8 @@
+from datetime import UTC, datetime
+
 import pytest
 
-from agent.tools.base import error, safe_tool
+from agent.tools.base import error, parse_window, safe_tool
 
 
 async def test_registered_tools_have_schemas(tools):
@@ -39,6 +41,15 @@ async def test_get_risk_label_flags_abstention(invoke, person, reason):
     out = await invoke("get_risk_label", person_id=person)
     assert out["reliable"] is False
     assert out["abstain_reason"] == reason
+
+
+@pytest.mark.parametrize("person", ["P031", "P019", "P035"])
+async def test_get_risk_label_redacts_model_output_when_unreliable(invoke, person):
+    out = await invoke("get_risk_label", person_id=person)
+    assert out["suppressed"] is True
+    assert (out["score"], out["label"], out["confidence"]) == (None, None, None)
+    assert "0.72" not in out["summary"]  # P031's score must not leak via the summary
+    assert out["wear_time_hours"] is not None  # the reason stays explainable
 
 
 async def test_get_risk_label_unknown_person_is_structured_error(invoke):
@@ -91,7 +102,7 @@ async def test_rank_candidates_sorted_and_capped(invoke):
     scores = [c["score"] for c in out["candidates"]]
     assert len(scores) == out["rows"] == 5
     assert scores == sorted(scores, reverse=True)
-    assert all(c["reliable"] in (True, False) for c in out["candidates"])
+    assert all(c["reliable"] is True for c in out["candidates"])
     assert (await invoke("rank_candidates", top_k=0))["code"] == "bad_argument"
     assert (await invoke("rank_candidates", top_k=201))["code"] == "bad_argument"
 
@@ -101,9 +112,22 @@ async def test_rank_candidates_excludes_unscored_and_applies_confidence(invoke):
     ids = {c["person_id"] for c in everyone["candidates"]}
     assert "P035" not in ids
     assert everyone["scored_people"] == 39
+    assert len(ids) + everyone["unranked_truncated"] + len(everyone["unranked"]) == 39
     confident = await invoke("rank_candidates", top_k=200, min_confidence=0.8)
     assert all(c["confidence"] >= 0.8 for c in confident["candidates"])
     assert "P019" not in {c["person_id"] for c in confident["candidates"]}
+
+
+async def test_rank_candidates_lists_unreliable_people_without_scores(invoke):
+    out = await invoke("rank_candidates", top_k=200)
+    ranked = {c["person_id"] for c in out["candidates"]}
+    unranked = {u["person_id"]: u for u in out["unranked"]}
+    assert {"P031", "P019", "P027", "P038"} <= unranked.keys()
+    assert not ranked & unranked.keys()
+    assert all("score" not in u for u in unranked.values())
+    assert unranked["P031"]["abstain_reason"] == "insufficient_data_quality"
+    assert unranked["P019"]["abstain_reason"] == "low_confidence"
+    assert "P035" not in unranked  # not scored at all
 
 
 async def test_compare_to_cohort(invoke):
@@ -149,3 +173,35 @@ async def test_compare_to_cohort_carries_trust_fields(invoke):
     assert out["reliable"] is False
     assert out["abstain_reason"] == "insufficient_data_quality"
     assert out["data_quality"] == "insufficient"
+
+
+PERSON_TOOLS = [
+    ("get_risk_label", {"person_id": "P012"}),
+    ("explain_risk", {"person_id": "P012"}),
+    ("explain_risk", {"person_id": "P031"}),
+    ("compare_to_cohort", {"person_id": "P012", "feature": "resting_hr_bpm"}),
+    ("data_quality_check", {"person_id": "P012"}),
+]
+
+
+@pytest.mark.parametrize(("name", "args"), PERSON_TOOLS)
+async def test_person_tools_carry_the_common_keys(invoke, name, args):
+    out = await invoke(name, **args)
+    assert {"summary", "rows", "model_version", "window", "person_id"} <= out.keys()
+    assert out["window"]["end"].startswith("2026-10-02")
+
+
+async def test_list_tool_carries_the_window_per_row(invoke):
+    out = await invoke("rank_candidates", top_k=3)
+    assert {"summary", "rows", "model_version", "window"} <= out.keys()
+    assert all(c["window"]["end"].startswith("2026-10-02") for c in out["candidates"])
+    assert all(u["window"]["end"] for u in out["unranked"])
+
+
+def test_parse_window():
+    assert parse_window("latest") is None
+    assert parse_window(" ") is None
+    assert parse_window("2026-10-01T00:00:00Z") == datetime(2026, 10, 1, tzinfo=UTC)
+    assert parse_window("2026-10-01") == datetime(2026, 10, 1, tzinfo=UTC)
+    with pytest.raises(ValueError, match="Invalid isoformat"):
+        parse_window("garbage")

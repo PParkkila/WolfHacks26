@@ -246,3 +246,33 @@ async def test_trace_keeps_parallel_same_tool_calls_apart(tmp_path):
     by_person = {c["args"]["person_id"]: c for c in calls}
     assert (by_person["P012"]["summary"], by_person["P012"]["rows"]) == ("for-a", 1)
     assert (by_person["P003"]["summary"], by_person["P003"]["rows"]) == ("for-b", 2)
+
+
+async def test_grounded_answer_leaves_done_unchanged_and_ungrounded_is_flagged(
+    tmp_path,
+):
+    path = tmp_path / "t.jsonl"
+    grounded = FakeResult(
+        [called("t", {}), returned({"summary": "score 0.87", "rows": 1}), delta("87%")]
+    )
+    events = await collect(service(grounded, JsonlTracer(path)))
+    assert events[-1].data == {"session_id": "s1"}
+
+    invented = FakeResult(
+        [called("t", {}), returned({"summary": "score 0.87", "rows": 1}), delta("93%")]
+    )
+    events = await collect(service(invented, JsonlTracer(path)))
+    assert [e.name for e in events] == ["tool_start", "tool_end", "token", "done"]
+    assert events[-1].data == {"session_id": "s1", "ungrounded_numbers": ["93"]}
+    first, second = (json.loads(line) for line in path.read_text().splitlines())
+    assert first["ungrounded_numbers"] == []
+    assert second["ungrounded_numbers"] == ["93"]
+
+
+def test_sse_frame_is_the_only_place_that_knows_the_wire_shape():
+    from agent.api.sse import sse_frame
+    from agent.domain.events import SseEvent
+
+    frame = sse_frame(SseEvent("token", {"text": "hi"}))
+    assert frame["event"] == "token"
+    assert json.loads(frame["data"]) == {"type": "token", "text": "hi"}

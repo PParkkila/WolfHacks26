@@ -37,9 +37,7 @@ def stat(mean=10.0, sd=2.0, median=10.0) -> FeatureStat:
         feature_name="f",
         mean=mean,
         stddev=sd,
-        p25=median - 1,
         p50=median,
-        p75=median + 1,
     )
 
 

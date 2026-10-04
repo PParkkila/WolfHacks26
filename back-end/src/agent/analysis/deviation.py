@@ -10,7 +10,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from agent.domain.models import FeatureStat, FeatureVector
+from agent.domain.models import FeatureStat, FeatureVector, RiskLabel
 
 Direction = Literal["above", "below", "at"]
 
@@ -99,7 +99,9 @@ def top_deviations(
     return found[:n]
 
 
-def assess_tension(label: str | None, deviations: list[FeatureDeviation]) -> Tension:
+def assess_tension(
+    label: RiskLabel | None, deviations: list[FeatureDeviation]
+) -> Tension:
     """Flag a label that the person's top deviations argue against."""
     aligned = sum(d.aligned_with_at_risk is True for d in deviations)
     opposed = sum(d.aligned_with_at_risk is False for d in deviations)

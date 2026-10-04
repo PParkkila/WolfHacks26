@@ -12,7 +12,7 @@ import {
 } from "react"
 
 import { api, ApiError, friendlyError, unwrap } from "@/lib/api/client"
-import type { ChatEvent, QueryResult } from "@/lib/api/events"
+import type { ChatEvent, ChatWidget, QueryResult } from "@/lib/api/events"
 import { keys } from "@/lib/api/queries"
 import { streamSSE } from "@/lib/api/sse"
 import { readCharts, saveChart } from "@/lib/chart-cache"
@@ -27,7 +27,7 @@ export type ChatPart =
       status: "running" | "done"
       summary?: string
     }
-  | { kind: "chart"; callId?: string; chart: QueryResult }
+  | { kind: "chart"; callId?: string; chart: QueryResult; widget?: ChatWidget }
   | { kind: "error"; message: string }
 
 export type ChatMessage = {
@@ -97,6 +97,7 @@ function reduce(message: ChatMessage, event: ChatEvent): ChatMessage {
         kind: "chart",
         callId: event.call_id,
         chart: event.chart,
+        widget: event.widget,
       }
       if (at === -1) parts.push(chart)
       else parts.splice(at + 1, 0, chart)
@@ -109,6 +110,9 @@ function reduce(message: ChatMessage, event: ChatEvent): ChatMessage {
       return event.ungrounded_numbers?.length
         ? { ...message, ungrounded: event.ungrounded_numbers }
         : message
+    default:
+      // An event this client doesn't know yet: keep the message as it is.
+      return message
   }
 }
 

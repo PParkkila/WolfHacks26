@@ -52,6 +52,7 @@ import { useThreads } from "@/lib/api/queries"
 const SUGGESTIONS: Record<Audience, string[]> = {
   clinician: [
     "Which patients need follow-up?",
+    "Build a widget ranking the 5 lowest Gluco Scores",
     "Largest Gluco Score declines in the last 24 h",
     "Compare average heart rate across my panel this week",
   ],

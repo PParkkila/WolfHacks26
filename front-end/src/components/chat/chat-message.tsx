@@ -20,6 +20,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { WidgetCard } from "@/components/widgets/widget-card"
 import { cn } from "@/lib/utils"
 
 /** What Gluco is doing while a tool runs, and once it has finished. */
@@ -35,7 +36,10 @@ const TOOL_LABELS: Record<Audience, Record<string, [string, string]>> = {
   },
   clinician: {
     list_participants: ["Ranking patients", "Ranked patients"],
-    get_participant: ["Retrieving patient summary", "Retrieved patient summary"],
+    get_participant: [
+      "Retrieving patient summary",
+      "Retrieved patient summary",
+    ],
     explain_change: [
       "Analysing change against baseline",
       "Analysed change against baseline",
@@ -43,6 +47,10 @@ const TOOL_LABELS: Record<Audience, Record<string, [string, string]>> = {
     compare_to_cohort: ["Comparing with panel", "Compared with panel"],
     cohort_overview: ["Summarising panel", "Summarised panel"],
     query_data: ["Retrieving readings", "Retrieved readings"],
+    build_widget: [
+      "Building widget: fetch, compliance check, design",
+      "Built widget",
+    ],
   },
 }
 
@@ -83,6 +91,14 @@ function Part({ part, audience }: { part: ChatPart; audience: Audience }) {
         </Marker>
       )
     case "chart":
+      if (part.widget)
+        return (
+          <WidgetCard
+            widget={part.widget}
+            chart={part.chart}
+            audience={audience}
+          />
+        )
       return (
         <div className="w-full rounded-lg border bg-card p-3">
           <QueryChart

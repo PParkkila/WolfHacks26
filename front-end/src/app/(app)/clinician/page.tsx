@@ -4,6 +4,7 @@ import { CohortOverview } from "@/components/clinician/cohort-overview"
 import { ParticipantTable } from "@/components/clinician/participant-table"
 import { PageContainer } from "@/components/page-container"
 import { RoleGate } from "@/components/role-gate"
+import { PinnedWidgets } from "@/components/widgets/pinned-widgets"
 
 export default function ClinicianPage() {
   return (
@@ -16,6 +17,7 @@ export default function ClinicianPage() {
             time shown.
           </p>
         </header>
+        <PinnedWidgets audience="clinician" />
         <CohortOverview />
         <ParticipantTable />
       </PageContainer>

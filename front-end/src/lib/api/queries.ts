@@ -1,10 +1,16 @@
 "use client"
 
-import { keepPreviousData, useQuery } from "@tanstack/react-query"
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query"
 
 import { api, unwrap, type Schemas } from "@/lib/api/client"
 
 export type QuerySpec = Schemas["QuerySpec"]
+export type WidgetSpec = Schemas["WidgetSpec"]
 export type SortOrder = "asc" | "desc"
 
 /**
@@ -22,6 +28,9 @@ export const keys = {
   explain: (id: string, hours: number) =>
     ["data", "explain", id, hours] as const,
   query: (spec: QuerySpec) => ["data", "query", spec] as const,
+  // The pin list is not under `data`: it only changes when the user pins.
+  pins: ["pins"] as const,
+  widget: (id: string) => ["data", "widget", id] as const,
   chat: ["chat"] as const,
   threads: ["chat", "threads"] as const,
 }
@@ -108,5 +117,48 @@ export function useThreads() {
   return useQuery({
     queryKey: keys.threads,
     queryFn: () => unwrap(api.GET("/chat/sessions")),
+  })
+}
+
+export function usePinnedWidgets() {
+  return useQuery({
+    queryKey: keys.pins,
+    queryFn: () => unwrap(api.GET("/widgets")),
+  })
+}
+
+/** A pinned widget rebuilt on the server (query + compliance check). */
+export function useWidgetData(id: string) {
+  return useQuery({
+    queryKey: keys.widget(id),
+    queryFn: () =>
+      unwrap(
+        api.GET("/widgets/{widget_id}/data", {
+          params: { path: { widget_id: id } },
+        })
+      ),
+    placeholderData: keepPreviousData,
+  })
+}
+
+export function usePinWidget() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (spec: WidgetSpec) =>
+      unwrap(api.POST("/widgets", { body: spec })),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.pins }),
+  })
+}
+
+export function useUnpinWidget() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) =>
+      unwrap(
+        api.DELETE("/widgets/{widget_id}", {
+          params: { path: { widget_id: id } },
+        })
+      ),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.pins }),
   })
 }

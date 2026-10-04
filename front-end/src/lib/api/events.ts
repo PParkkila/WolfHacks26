@@ -5,6 +5,11 @@ import type { Schemas } from "@/lib/api/client"
 
 export type QueryResult = Schemas["QueryResult"]
 export type ClockState = Schemas["ClockState"]
+export type WidgetSpec = Schemas["WidgetSpec"]
+export type WidgetStep = Schemas["WidgetStep"]
+
+/** A widget built in chat: the spec a pin stores, plus how it was built. */
+export type ChatWidget = WidgetSpec & { steps: WidgetStep[] }
 
 /** GET /stream */
 export type TickEvent = {
@@ -31,6 +36,13 @@ export type ChatEvent =
       summary: string
       rows: number
     }
-  | { type: "data"; call_id: string; tool: string; chart: QueryResult }
+  | {
+      type: "data"
+      call_id: string
+      tool: string
+      chart: QueryResult
+      /** Set when the chart is a widget the agent built (build_widget). */
+      widget?: ChatWidget
+    }
   | { type: "error"; message: string; recoverable: boolean }
   | { type: "done"; session_id: string; ungrounded_numbers?: string[] }

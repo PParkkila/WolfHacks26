@@ -286,6 +286,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/widgets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Widgets */
+        get: operations["list_widgets_widgets_get"];
+        put?: never;
+        /** Pin Widget */
+        post: operations["pin_widget_widgets_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/widgets/{widget_id}/data": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Widget Data */
+        get: operations["widget_data_widgets__widget_id__data_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/widgets/{widget_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Unpin Widget */
+        delete: operations["unpin_widget_widgets__widget_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -349,7 +401,7 @@ export interface components {
             largest_shifts: string[];
             /**
              * Note
-             * @default Deltas compare the newest window with the one N hours earlier; z-scores compare the newest value with this person's own last 7 days. These are associations, not causes, and the Gluco Score is a model estimate, not a measurement or a diagnosis.
+             * @default Changes compare the most recent 24 h window with the one N hours earlier; standard deviation (SD) scores compare the latest value with this patient's own last 7 days. These are associations, not causal relationships, and the Gluco Score is a model estimate, not a measurement or a diagnosis.
              */
             note?: string;
         };
@@ -593,6 +645,24 @@ export interface components {
                 [key: string]: number | null;
             };
         };
+        /** PinnedWidget */
+        PinnedWidget: {
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "trend" | "ranking" | "cohort_trend";
+            query: components["schemas"]["QuerySpec"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /** PrincipalOut */
         PrincipalOut: {
             /** User Id */
@@ -710,6 +780,51 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** WidgetData */
+        WidgetData: {
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "trend" | "ranking" | "cohort_trend";
+            query: components["schemas"]["QuerySpec"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            result: components["schemas"]["QueryResult"];
+            /** Steps */
+            steps: components["schemas"]["WidgetStep"][];
+        };
+        /**
+         * WidgetSpec
+         * @description What a pin stores: enough to rebuild the widget at any later time.
+         */
+        WidgetSpec: {
+            /** Title */
+            title: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "trend" | "ranking" | "cohort_trend";
+            query: components["schemas"]["QuerySpec"];
+        };
+        /** WidgetStep */
+        WidgetStep: {
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "design" | "fetch" | "compliance" | "bind";
+            /** Text */
+            text: string;
         };
     };
     responses: never;
@@ -1181,6 +1296,119 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     }[];
+                };
+            };
+        };
+    };
+    list_widgets_widgets_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PinnedWidget"][];
+                };
+            };
+        };
+    };
+    pin_widget_widgets_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WidgetSpec"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PinnedWidget"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    widget_data_widgets__widget_id__data_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                widget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WidgetData"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unpin_widget_widgets__widget_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                widget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -110,8 +110,9 @@ export function PinnedWidgets({ audience }: { audience: Audience }) {
           Pinned widgets
         </h2>
         <p className="text-sm text-muted-foreground">
-          Built by Gluco from your requests. Each one re-runs its query and
-          compliance check as new data streams in.
+          {audience === "patient"
+            ? "Charts you asked Gluco to keep here. They update as new readings come in."
+            : "Built by Gluco from your requests. Each one re-runs its query and compliance check as new data streams in."}
         </p>
       </div>
       <div className="grid gap-4 @2xl/main:grid-cols-2 @5xl/main:grid-cols-3">

@@ -20,6 +20,7 @@ from agent.tools.base import (
     safe_tool,
     week_summary,
 )
+from agent.tools.widgets import build_my_widget_tool
 
 
 def build(svc: QueryService) -> list[FunctionTool]:
@@ -143,4 +144,10 @@ def build(svc: QueryService) -> list[FunctionTool]:
             chart=chart(answer),
         )
 
-    return [get_my_status, explain_my_change, get_my_trend, query_my_data]
+    return [
+        get_my_status,
+        explain_my_change,
+        get_my_trend,
+        query_my_data,
+        build_my_widget_tool(svc),
+    ]

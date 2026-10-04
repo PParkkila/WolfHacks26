@@ -40,6 +40,17 @@ async def test_build_widget_runs_the_whole_pipeline(invoke_clinician):
     assert scores == sorted(scores)
 
 
+async def test_a_patient_widget_only_ever_shows_their_own_data(invoke_patient):
+    out = await invoke_patient(
+        "build_my_widget", title="My heart rate", metrics=["hr_mean_bpm_24h"]
+    )
+    [series] = out["chart"]["series"]
+    assert series["participant_id"] == "Patient 013"
+    compliance = next(s for s in out["widget"]["steps"] if s["stage"] == "compliance")
+    assert "your own data only" in compliance["text"]
+    assert out["widget"]["kind"] == "trend"
+
+
 async def test_build_widget_failures_are_payloads(invoke_clinician):
     bad = await invoke_clinician(
         "build_widget", title="x", kind="trend", metrics=["glucose"]

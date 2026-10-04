@@ -33,6 +33,7 @@ const TOOL_LABELS: Record<Audience, Record<string, [string, string]>> = {
       "Looking through your readings",
       "Looked through your readings",
     ],
+    build_my_widget: ["Building your widget", "Built your widget"],
   },
   clinician: {
     list_participants: ["Ranking patients", "Ranked patients"],

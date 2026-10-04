@@ -6,6 +6,7 @@ import { GlucoScore } from "@/components/gluco-score"
 import { QueryChart } from "@/components/query-chart"
 import { PRIMARY_VITALS, ReadingRow, VitalTile } from "@/components/vitals"
 import { WhatChanged } from "@/components/what-changed"
+import { PinnedWidgets } from "@/components/widgets/pinned-widgets"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -133,6 +134,8 @@ export function PatientDashboard({ principal }: { principal: Principal }) {
           )}
         </section>
       </Card>
+
+      <PinnedWidgets audience="patient" />
 
       <section className="flex flex-col gap-4" aria-labelledby="vitals-heading">
         <SectionHeading

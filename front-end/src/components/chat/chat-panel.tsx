@@ -58,6 +58,7 @@ const SUGGESTIONS: Record<Audience, string[]> = {
   ],
   patient: [
     "Why did my score change?",
+    "Make a widget tracking my heart rate this week",
     "How active was I this week?",
     "What does my Gluco Score mean?",
   ],

@@ -1,4 +1,9 @@
-"""The widget builder tool: one call runs the whole pipeline in `agent.widgets`."""
+"""The widget builder tools: one call runs the whole pipeline in `agent.widgets`.
+
+Clinicians get `build_widget` (any kind, anyone on the panel). Patients get
+`build_my_widget`, which, like every patient tool, takes no participant
+argument: it can only ever chart the signed-in patient's own readings.
+"""
 
 from typing import Any, Literal
 
@@ -7,6 +12,22 @@ from agents import FunctionTool, function_tool
 from agent import widgets
 from agent.query import QueryService
 from agent.tools.base import chart, dump, result, safe_tool
+
+
+def _widget_result(svc: QueryService, spec: widgets.WidgetSpec) -> dict[str, Any]:
+    built = widgets.build(svc, spec)
+    return result(
+        summary=f"Built widget {spec.title!r}",
+        rows=sum(len(s.points) for s in built.result.series),
+        as_of=svc.as_of(),
+        chart=chart(built.result),
+        widget={
+            "title": spec.title,
+            "kind": spec.kind,
+            "query": spec.query.model_dump(mode="json", exclude_none=True),
+            "steps": [dump(step) for step in built.steps],
+        },
+    )
 
 
 def build_widget_tool(svc: QueryService) -> FunctionTool:
@@ -49,18 +70,38 @@ def build_widget_tool(svc: QueryService) -> FunctionTool:
             kind=kind,
             query=widgets.design(kind, metrics, participants, hours, agg, order, limit),
         )
-        built = widgets.build(svc, spec)
-        return result(
-            summary=f"Built widget {title!r}",
-            rows=sum(len(s.points) for s in built.result.series),
-            as_of=svc.as_of(),
-            chart=chart(built.result),
-            widget={
-                "title": spec.title,
-                "kind": spec.kind,
-                "query": spec.query.model_dump(mode="json", exclude_none=True),
-                "steps": [dump(step) for step in built.steps],
-            },
-        )
+        return _widget_result(svc, spec)
 
     return build_widget
+
+
+def build_my_widget_tool(svc: QueryService) -> FunctionTool:
+    @function_tool
+    @safe_tool
+    def build_my_widget(
+        title: str,
+        metrics: list[str],
+        hours: float = 168,
+        agg: Literal["mean", "median", "min", "max"] | None = None,
+    ) -> dict[str, Any]:
+        """Build a widget of your own readings over time, which you can pin to
+        your page. Use when you're asked for a widget, or to track or keep an
+        eye on something.
+
+        Runs a pipeline: design the query, fetch your data, compliance check,
+        bind to live data. The app draws it under your answer with a Pin button.
+
+        Args:
+            title: A short, friendly title, e.g. "My heart rate this week".
+            metrics: Metric names from the catalog.
+            hours: How far back from now (default 168, one week).
+            agg: How each hour or day is reduced (default "mean").
+        """
+        spec = widgets.WidgetSpec(
+            title=title,
+            kind="trend",
+            query=widgets.design("trend", metrics, None, hours, agg, "asc", 1),
+        )
+        return _widget_result(svc, spec)
+
+    return build_my_widget

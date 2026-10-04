@@ -52,7 +52,10 @@ def sanitize(
         for s in series
     ]
     if keyed:
-        audit.append(f"{keyed} internal patient keys replaced with display names")
+        audit.append(
+            f"{keyed} internal patient key{'s' if keyed != 1 else ''} "
+            "replaced with display names"
+        )
 
     hidden = 0
     cleaned: list[Series] = []

@@ -23,7 +23,11 @@ RANKING = {
 
 async def test_build_widget_runs_the_whole_pipeline(invoke_clinician):
     out = await invoke_clinician(
-        "build_widget", title="Lowest", kind="ranking", metrics=[GLUCO_SCORE]
+        "build_widget",
+        title="Lowest",
+        kind="ranking",
+        metrics=[GLUCO_SCORE],
+        participants=[],  # what models send for "everyone"
     )
     widget = out["widget"]
     assert [step["stage"] for step in widget["steps"]] == STAGES

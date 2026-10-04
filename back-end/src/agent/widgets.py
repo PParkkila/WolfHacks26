@@ -61,6 +61,7 @@ def design(
     limit: int,
 ) -> QuerySpec:
     """The query that draws `kind` well."""
+    participants = participants or None  # models send [] for "everyone"
     bucket = "hour" if hours <= 48 else "day"
     if kind == "ranking":
         return QuerySpec(

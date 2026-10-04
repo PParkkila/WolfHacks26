@@ -142,3 +142,10 @@ def test_safe_tool_never_raises():
     assert out["code"] == "internal_error"
     assert "secret" not in str(out)
     assert error("x", "y")["rows"] == 0
+
+
+async def test_compare_to_cohort_carries_trust_fields(invoke):
+    out = await invoke("compare_to_cohort", person_id="P031", feature="resting_hr_bpm")
+    assert out["reliable"] is False
+    assert out["abstain_reason"] == "insufficient_data_quality"
+    assert out["data_quality"] == "insufficient"

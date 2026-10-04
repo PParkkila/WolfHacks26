@@ -55,9 +55,9 @@ class _JsonlRecorder:
         elif event.name == "tool_start":
             call = {"tool": event.data["tool"], "args": event.data["args"]}
             self._calls.append(call)
-            self._open[event.data["tool"]] = (call, now)
+            self._open[event.data["call_id"]] = (call, now)
         elif event.name == "tool_end":
-            call, started = self._open.pop(event.data["tool"], ({}, now))
+            call, started = self._open.pop(event.data["call_id"], ({}, now))
             call.update(
                 rows=event.data["rows"],
                 summary=event.data["summary"],

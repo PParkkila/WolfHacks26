@@ -50,7 +50,7 @@ def create_app(runtime: Runtime) -> FastAPI:
                 log.exception("model_version lookup failed")
         return {
             "db": db,
-            "llm": runtime.settings.gemini_api_key is not None,
+            "llm": runtime.llm.is_ready(),
             "model_version": model_version,
         }
 

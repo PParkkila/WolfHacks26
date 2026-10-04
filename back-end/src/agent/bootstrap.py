@@ -2,13 +2,7 @@
 
 from dataclasses import dataclass
 
-from agents import (
-    FunctionTool,
-    set_default_openai_api,
-    set_default_openai_client,
-    set_tracing_disabled,
-)
-from openai import AsyncOpenAI
+from agents import FunctionTool
 
 from agent.analysis.quality import ReliabilityPolicy
 from agent.api.chat_service import ChatService
@@ -18,6 +12,7 @@ from agent.data.factory import build_repositories
 from agent.domain.ports import Repositories
 from agent.factory import build_agent
 from agent.guardrails import build_input_guardrails
+from agent.llm import LlmConnection
 from agent.observability.trace import JsonlTracer
 from agent.tools.base import ToolDeps
 from agent.tools.registry import build_tools
@@ -26,27 +21,16 @@ from agent.tools.registry import build_tools
 @dataclass(frozen=True)
 class Runtime:
     settings: Settings
+    llm: LlmConnection
     repos: Repositories
     tools: list[FunctionTool]
     chat: ChatService
 
 
-def configure_sdk(settings: Settings) -> None:
-    # SDK tracing uploads tool outputs (person-level health data) to OpenAI.
-    set_tracing_disabled(True)
-    # Gemini's OpenAI-compat layer speaks Chat Completions, not Responses.
-    set_default_openai_api("chat_completions")
-    if settings.gemini_api_key is not None:
-        client = AsyncOpenAI(
-            api_key=settings.gemini_api_key.get_secret_value(),
-            base_url=settings.gemini_base_url,
-        )
-        set_default_openai_client(client, use_for_tracing=False)
-
-
 def build_runtime(settings: Settings | None = None) -> Runtime:
     settings = settings or Settings()  # pyright: ignore[reportCallIssue]
-    configure_sdk(settings)
+    llm = LlmConnection.from_settings(settings)
+    llm.configure()
 
     repos = build_repositories(settings)
     tools = build_tools(ToolDeps(repos=repos, policy=ReliabilityPolicy()))
@@ -61,4 +45,4 @@ def build_runtime(settings: Settings | None = None) -> Runtime:
         tracer=JsonlTracer(settings.trace_path),
         max_turns=settings.max_turns,
     )
-    return Runtime(settings=settings, repos=repos, tools=tools, chat=chat)
+    return Runtime(settings=settings, llm=llm, repos=repos, tools=tools, chat=chat)

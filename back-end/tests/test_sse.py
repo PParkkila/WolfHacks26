@@ -39,12 +39,17 @@ def test_translator_maps_the_five_event_kinds():
     start = t.translate(called("get_risk_label", {"person_id": "P012"}))[0]
     assert (start.name, start.data) == (
         "tool_start",
-        {"tool": "get_risk_label", "args": {"person_id": "P012"}},
+        {"call_id": "c1", "tool": "get_risk_label", "args": {"person_id": "P012"}},
     )
     end = t.translate(returned({"summary": "P012: at_risk", "rows": 1}))[0]
     assert (end.name, end.data) == (
         "tool_end",
-        {"tool": "get_risk_label", "summary": "P012: at_risk", "rows": 1},
+        {
+            "call_id": "c1",
+            "tool": "get_risk_label",
+            "summary": "P012: at_risk",
+            "rows": 1,
+        },
     )
 
 
@@ -184,6 +189,60 @@ def test_translator_accepts_genuine_sdk_items():
             name="tool_called", item=ToolCallItem(agent=sdk_agent, raw_item=call)
         )
     )[0]
-    assert start.data == {"tool": "get_risk_label", "args": {"person_id": "P012"}}
+    assert start.data == {
+        "call_id": "call_1",
+        "tool": "get_risk_label",
+        "args": {"person_id": "P012"},
+    }
     end = t.translate(RunItemStreamEvent(name="tool_output", item=output))[0]
-    assert end.data == {"tool": "get_risk_label", "summary": "s", "rows": 3}
+    assert end.data == {
+        "call_id": "call_1",
+        "tool": "get_risk_label",
+        "summary": "s",
+        "rows": 3,
+    }
+
+
+def test_parallel_calls_to_one_tool_pair_by_call_id_even_out_of_order():
+    t = StreamTranslator()
+    t.translate(called("compare_to_cohort", {"person_id": "P012"}, call_id="a"))
+    t.translate(called("compare_to_cohort", {"person_id": "P003"}, call_id="b"))
+    second = t.translate(returned({"summary": "P003", "rows": 1}, call_id="b"))[0]
+    first = t.translate(returned({"summary": "P012", "rows": 1}, call_id="a"))[0]
+    assert (second.data["call_id"], second.data["summary"]) == ("b", "P003")
+    assert (first.data["call_id"], first.data["summary"]) == ("a", "P012")
+
+
+def test_missing_call_id_is_generated_and_paired_oldest_first():
+    t = StreamTranslator()
+    start = t.translate(
+        RunItemStreamEvent(
+            name="tool_called",
+            item=SimpleNamespace(raw_item={"name": "explain_risk", "arguments": "{}"}),
+        )
+    )[0]
+    assert start.data["call_id"] == "call-1"
+    end = t.translate(
+        RunItemStreamEvent(
+            name="tool_output",
+            item=SimpleNamespace(raw_item={}, output={"summary": "s", "rows": 1}),
+        )
+    )[0]
+    assert (end.data["call_id"], end.data["tool"]) == ("call-1", "explain_risk")
+
+
+async def test_trace_keeps_parallel_same_tool_calls_apart(tmp_path):
+    path = tmp_path / "t.jsonl"
+    fake = FakeResult(
+        [
+            called("compare_to_cohort", {"person_id": "P012"}, call_id="a"),
+            called("compare_to_cohort", {"person_id": "P003"}, call_id="b"),
+            returned({"summary": "for-b", "rows": 2}, call_id="b"),
+            returned({"summary": "for-a", "rows": 1}, call_id="a"),
+        ]
+    )
+    await collect(service(fake, JsonlTracer(path)))
+    calls = json.loads(path.read_text().splitlines()[0])["tool_calls"]
+    by_person = {c["args"]["person_id"]: c for c in calls}
+    assert (by_person["P012"]["summary"], by_person["P012"]["rows"]) == ("for-a", 1)
+    assert (by_person["P003"]["summary"], by_person["P003"]["rows"]) == ("for-b", 2)

@@ -6,11 +6,19 @@ from typing import Any
 from agents import FunctionTool, function_tool
 
 from agent.analysis.deviation import describe_feature
-from agent.tools.base import ToolDeps, error, not_found, result, safe_tool, window_of
+from agent.tools.base import (
+    ToolDeps,
+    error,
+    not_found,
+    result,
+    safe_tool,
+    verdict_fields,
+    window_of,
+)
 
 
 def build(deps: ToolDeps) -> list[FunctionTool]:
-    repos = deps.repos
+    repos, assessor = deps.repos, deps.assessor
 
     @function_tool
     @safe_tool
@@ -24,11 +32,12 @@ def build(deps: ToolDeps) -> list[FunctionTool]:
             person_id: The person's id, for example "P012".
             feature: Exact feature name, for example "resting_hr_bpm".
         """
-        score = repos.risk.get_score(person_id)
-        vector = (
-            repos.features.get_features(person_id, score.window_end) if score else None
-        )
-        if score is None or vector is None:
+        assessment = assessor.assess(person_id)
+        if assessment is None:
+            return not_found(person_id)
+        score = assessment.score
+        vector = repos.features.get_features(person_id, score.window_end)
+        if vector is None:
             return not_found(person_id)
 
         stats = repos.stats.feature_stats("all")
@@ -67,6 +76,7 @@ def build(deps: ToolDeps) -> list[FunctionTool]:
             percentile=round(deviation.percentile, 1),
             direction=deviation.direction,
             percentile_method="normal_approximation",
+            **verdict_fields(assessment),
         )
 
     return [compare_to_cohort]

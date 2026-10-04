@@ -30,10 +30,15 @@ def _parse_args(raw: Any) -> dict[str, Any]:
 
 
 class StreamTranslator:
-    """Stateful per request: remembers which tool each call id belongs to."""
+    """Stateful per request: the one place that pairs a tool call with its result.
+
+    Both events carry the same `call_id`, so consumers (trace, frontend chips)
+    never have to pair by tool name, which breaks on parallel calls to one tool.
+    """
 
     def __init__(self) -> None:
-        self._tool_by_call: dict[str, str] = {}
+        self._open: dict[str, str] = {}  # call_id -> tool, oldest first
+        self._generated = 0
 
     def translate(self, event: StreamEvent) -> list[SseEvent]:
         if isinstance(event, RawResponsesStreamEvent):
@@ -51,15 +56,25 @@ class StreamTranslator:
         raw = item.raw_item
         tool = _field(raw, "name") or getattr(item, "tool_name", None) or "unknown"
         call_id = _field(raw, "call_id")
-        if call_id:
-            self._tool_by_call[call_id] = tool
+        if not call_id:
+            self._generated += 1
+            call_id = f"call-{self._generated}"
+        self._open[call_id] = tool
         return SseEvent(
-            "tool_start", {"tool": tool, "args": _parse_args(_field(raw, "arguments"))}
+            "tool_start",
+            {
+                "call_id": call_id,
+                "tool": tool,
+                "args": _parse_args(_field(raw, "arguments")),
+            },
         )
 
     def _tool_end(self, item: Any) -> SseEvent:
         call_id = _field(item.raw_item, "call_id")
-        tool = self._tool_by_call.get(call_id, "unknown")
+        if call_id not in self._open:
+            # No usable id on the result: pair with the oldest open call, if any.
+            call_id = next(iter(self._open), call_id or "unknown")
+        tool = self._open.pop(call_id, "unknown")
         output = item.output
         if isinstance(output, dict):
             summary = output.get("summary") or output.get("error") or ""
@@ -68,5 +83,10 @@ class StreamTranslator:
             summary, rows = str(output), 0
         return SseEvent(
             "tool_end",
-            {"tool": tool, "summary": str(summary)[:SUMMARY_LIMIT], "rows": rows},
+            {
+                "call_id": call_id,
+                "tool": tool,
+                "summary": str(summary)[:SUMMARY_LIMIT],
+                "rows": rows,
+            },
         )

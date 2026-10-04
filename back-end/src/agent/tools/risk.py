@@ -4,23 +4,17 @@ from typing import Any
 
 from agents import FunctionTool, function_tool
 
-from agent.analysis.deviation import assess_tension, top_deviations
-from agent.analysis.quality import assess_quality, assess_reliability
+from agent.explanation import CAVEAT, METHOD, Explanation, NoFeatures, Withheld
 from agent.tools.base import (
     MAX_ROWS,
     ToolDeps,
     cap_rows,
     error,
     not_found,
-    parse_window,
     result,
     safe_tool,
+    verdict_fields,
     window_of,
-)
-
-EXPLANATION_CAVEAT = (
-    "These are cohort deviations: how unusual each value is for this person. "
-    "They are associations, not model attributions or causes."
 )
 
 
@@ -31,7 +25,7 @@ def _rounded(values: dict[str, Any], digits: int = 2) -> dict[str, Any]:
 
 
 def build(deps: ToolDeps) -> list[FunctionTool]:
-    repos, policy = deps.repos, deps.policy
+    assessor, explainer = deps.assessor, deps.explainer
 
     @function_tool
     @safe_tool
@@ -45,11 +39,10 @@ def build(deps: ToolDeps) -> list[FunctionTool]:
             person_id: The person's id, for example "P012".
             window: "latest" (default) or an ISO-8601 window end timestamp.
         """
-        score = repos.risk.get_score(person_id, parse_window(window))
-        if score is None:
+        assessment = assessor.assess(person_id, window)
+        if assessment is None:
             return not_found(person_id)
-        reliability = assess_reliability(score, policy)
-        quality = assess_quality(score, policy)
+        score = assessment.score
         scored = score.score is not None
         return result(
             summary=(
@@ -68,9 +61,7 @@ def build(deps: ToolDeps) -> list[FunctionTool]:
             confidence=score.confidence,
             wear_time_hours=score.wear_time_hours,
             missing_signal_pct=score.missing_signal_pct,
-            data_quality=quality.verdict,
-            reliable=reliability.reliable,
-            abstain_reason=reliability.abstain_reason,
+            **verdict_fields(assessment),
         )
 
     @function_tool
@@ -88,51 +79,47 @@ def build(deps: ToolDeps) -> list[FunctionTool]:
         Args:
             person_id: The person's id, for example "P012".
         """
-        score = repos.risk.get_score(person_id)
-        if score is None:
+        assessment = assessor.assess(person_id)
+        if assessment is None:
             return not_found(person_id)
+        score = assessment.score
         window = window_of(score)
 
-        reliability = assess_reliability(score, policy)
-        if not reliability.reliable:
-            return result(
-                summary=(
-                    f"{person_id}: explanation withheld ({reliability.abstain_reason})"
-                ),
-                rows=0,
-                model_version=score.model_version,
-                window=window,
-                method="cohort_deviation",
-                abstain=True,
-                abstain_reason=reliability.abstain_reason,
-            )
-
-        vector = repos.features.get_features(person_id, score.window_end)
-        if vector is None:
-            return error("no_features", f"No feature vector stored for {person_id}.")
-
-        deviations = top_deviations(
-            vector,
-            repos.stats.feature_stats("all"),
-            repos.stats.feature_stats("at_risk"),
-        )
-        tension = assess_tension(score.label, deviations)
-        return result(
-            summary=f"{person_id}: {len(deviations)} most unusual features vs cohort",
-            rows=len(deviations),
-            model_version=score.model_version,
-            window=window,
-            method="cohort_deviation",
-            person_id=person_id,
-            label=score.label,
-            score=score.score,
-            confidence=score.confidence,
-            top_features=[_rounded(d.model_dump()) for d in deviations],
-            tension=tension.present,
-            aligned_with_at_risk_group=tension.aligned,
-            opposed_to_at_risk_group=tension.opposed,
-            caveat=EXPLANATION_CAVEAT,
-        )
+        match explainer.explain(assessment):
+            case Withheld(reason):
+                return result(
+                    summary=f"{person_id}: explanation withheld ({reason})",
+                    rows=0,
+                    model_version=score.model_version,
+                    window=window,
+                    method=METHOD,
+                    abstain=True,
+                    abstain_reason=reason,
+                )
+            case NoFeatures():
+                return error(
+                    "no_features", f"No feature vector stored for {person_id}."
+                )
+            case Explanation(deviations, tension):
+                return result(
+                    summary=(
+                        f"{person_id}: {len(deviations)} most unusual features "
+                        "vs cohort"
+                    ),
+                    rows=len(deviations),
+                    model_version=score.model_version,
+                    window=window,
+                    method=METHOD,
+                    person_id=person_id,
+                    label=score.label,
+                    score=score.score,
+                    confidence=score.confidence,
+                    top_features=[_rounded(d.model_dump()) for d in deviations],
+                    tension=tension.present,
+                    aligned_with_at_risk_group=tension.aligned,
+                    opposed_to_at_risk_group=tension.opposed,
+                    caveat=CAVEAT,
+                )
 
     @function_tool
     @safe_tool
@@ -149,28 +136,28 @@ def build(deps: ToolDeps) -> list[FunctionTool]:
         if not 1 <= top_k <= MAX_ROWS:
             raise ValueError(f"top_k must be between 1 and {MAX_ROWS}")
         scored = [
-            s
-            for s in repos.risk.latest_scores()
-            if s.score is not None and (s.confidence or 0.0) >= min_confidence
+            a
+            for a in assessor.assess_all()
+            if a.score.score is not None
+            and (a.score.confidence or 0.0) >= min_confidence
         ]
-        scored.sort(key=lambda s: (-(s.score or 0.0), s.person_id))
+        scored.sort(key=lambda a: (-(a.score.score or 0.0), a.person_id))
         rows, truncation = cap_rows(scored[:top_k])
         return result(
             summary=f"Top {len(rows)} of {len(scored)} scored people by risk score",
             rows=len(rows),
-            model_version=rows[0].model_version if rows else None,
+            model_version=rows[0].score.model_version if rows else None,
             candidates=[
                 {
                     "rank": rank,
-                    "person_id": s.person_id,
-                    "score": s.score,
-                    "label": s.label,
-                    "confidence": s.confidence,
-                    "data_quality": assess_quality(s, policy).verdict,
-                    "reliable": assess_reliability(s, policy).reliable,
-                    "window_end": s.window_end.isoformat(),
+                    "person_id": a.person_id,
+                    "score": a.score.score,
+                    "label": a.score.label,
+                    "confidence": a.score.confidence,
+                    "window_end": a.score.window_end.isoformat(),
+                    **verdict_fields(a),
                 }
-                for rank, s in enumerate(rows, start=1)
+                for rank, a in enumerate(rows, start=1)
             ],
             scored_people=len(scored),
             **truncation,

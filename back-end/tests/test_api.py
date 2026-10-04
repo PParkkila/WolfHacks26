@@ -18,7 +18,7 @@ class FakeChat:
 
 def make_client(repos, tools) -> TestClient:
     runtime = SimpleNamespace(
-        settings=SimpleNamespace(gemini_api_key="k"),
+        llm=SimpleNamespace(is_ready=lambda: True),
         repos=repos,
         tools=list(tools.values()),
         chat=FakeChat(),

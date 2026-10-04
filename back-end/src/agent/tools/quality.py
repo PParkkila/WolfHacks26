@@ -4,12 +4,11 @@ from typing import Any
 
 from agents import FunctionTool, function_tool
 
-from agent.analysis.quality import assess_quality
 from agent.tools.base import ToolDeps, not_found, result, safe_tool, window_of
 
 
 def build(deps: ToolDeps) -> list[FunctionTool]:
-    repos, policy = deps.repos, deps.policy
+    assessor = deps.assessor
 
     @function_tool
     @safe_tool
@@ -23,10 +22,10 @@ def build(deps: ToolDeps) -> list[FunctionTool]:
         Args:
             person_id: The person's id, for example "P003".
         """
-        score = repos.risk.get_score(person_id)
-        if score is None:
+        assessment = assessor.assess(person_id)
+        if assessment is None:
             return not_found(person_id)
-        quality = assess_quality(score, policy)
+        score, quality = assessment.score, assessment.quality
         return result(
             summary=f"{person_id}: data quality {quality.verdict}",
             rows=1,

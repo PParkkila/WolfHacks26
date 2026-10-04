@@ -12,12 +12,13 @@ import functools
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from typing import Any
 
 from agent.analysis.quality import ReliabilityPolicy
+from agent.assessment import Assessment, Assessor
 from agent.domain.models import RiskScore
 from agent.domain.ports import Repositories
+from agent.explanation import Explainer
 
 log = logging.getLogger(__name__)
 
@@ -28,6 +29,14 @@ MAX_ROWS = 200
 class ToolDeps:
     repos: Repositories
     policy: ReliabilityPolicy
+
+    @property
+    def assessor(self) -> Assessor:
+        return Assessor(self.repos.risk, self.policy)
+
+    @property
+    def explainer(self) -> Explainer:
+        return Explainer(self.repos.features, self.repos.stats)
 
 
 def window_of(score: RiskScore) -> dict[str, str]:
@@ -73,12 +82,13 @@ def cap_rows(rows: list[Any]) -> tuple[list[Any], dict[str, Any]]:
     }
 
 
-def parse_window(window: str) -> datetime | None:
-    """`latest` -> None (repositories pick the newest); otherwise an ISO window_end."""
-    if window.strip().lower() in ("", "latest"):
-        return None
-    parsed = datetime.fromisoformat(window)
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+def verdict_fields(assessment: Assessment) -> dict[str, Any]:
+    """The trust fields every person-level payload carries."""
+    return {
+        "data_quality": assessment.quality.verdict,
+        "reliable": assessment.reliable,
+        "abstain_reason": assessment.reliability.abstain_reason,
+    }
 
 
 def safe_tool[F: Callable[..., dict[str, Any]]](fn: F) -> F:

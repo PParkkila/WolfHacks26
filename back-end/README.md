@@ -28,6 +28,9 @@ cp .env.example .env   # set AGENT_MODEL and GEMINI_API_KEY; DATA_BACKEND=mock u
 src/agent/
   config.py        Settings; the only reader of env vars
   bootstrap.py     Composition root
+  llm.py           LlmConnection: the only module that knows the provider
+  assessment.py    Assessor: lookup + data quality + reliability, decided once
+  explanation.py   Explainer: cohort-deviation explanation, withheld when unreliable
   domain/          Pydantic records, read-only data Protocols, Contract B events
   data/            mock.py and postgres.py implement the ports; factory.py picks one
   analysis/        Pure logic: cohort stats, z-scores, quality and abstention policy

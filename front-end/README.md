@@ -1,4 +1,4 @@
-# PulseCast web app
+# Gluco web app
 
 Next.js 16 + Tailwind 4 + shadcn/ui front-end for the FastAPI back-end in
 `../back-end` (read its README for the API, roles and the replay clock).

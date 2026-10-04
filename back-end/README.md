@@ -1,4 +1,4 @@
-# PulseCast back-end
+# Gluco back-end
 
 Read-only API over the dashboard data Databricks publishes to Tiger
 (`gold.dashboard_windows`). It serves a dashboard and two chatbots: one for

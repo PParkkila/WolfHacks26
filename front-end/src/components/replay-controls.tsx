@@ -64,6 +64,9 @@ export function ReplayControls() {
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
       <div className="flex items-center gap-3">
+        <Badge variant="outline" className="bg-background">
+          Demo replay
+        </Badge>
         <Button
           size="icon-sm"
           variant="outline"

@@ -52,7 +52,7 @@ function Stat({
         <CardDescription>{label}</CardDescription>
       </CardHeader>
       <CardContent className="flex items-baseline gap-2">
-        <span className="text-3xl font-semibold tracking-tight tabular-nums">
+        <span className="text-3xl font-bold tracking-tight">
           {value}
         </span>
         {hint ? (

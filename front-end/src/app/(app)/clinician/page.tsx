@@ -10,7 +10,7 @@ export default function ClinicianPage() {
     <RoleGate role="clinician">
       <PageContainer>
         <header className="flex flex-col gap-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Cohort</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Cohort</h1>
           <p className="text-muted-foreground">
             Everyone&apos;s newest Gluco Score and sensor readings, up to the
             replay clock.

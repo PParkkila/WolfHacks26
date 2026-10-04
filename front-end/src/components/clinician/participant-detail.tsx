@@ -132,7 +132,7 @@ export function ParticipantDetail({ id }: { id: string }) {
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           {row ? (
             <>
-              <h1 className="text-2xl font-semibold tracking-tight">
+              <h1 className="text-2xl font-bold tracking-tight">
                 {row.display_name}
               </h1>
               <Badge variant="outline">{row.source_dataset}</Badge>

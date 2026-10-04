@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 
 
 def create_app(runtime: Runtime) -> FastAPI:
-    app = FastAPI(title="PulseCast API")
+    app = FastAPI(title="Gluco API")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=runtime.settings.allowed_origins,

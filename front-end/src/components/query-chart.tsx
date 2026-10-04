@@ -38,7 +38,9 @@ type Series = QueryResult["series"][number]
 // recede to a neutral line rather than inventing new hues.
 const SLOTS = 5
 
-function seriesColor(index: number) {
+function seriesColor(index: number, count: number) {
+  // A lone series (a person's own trend, the cohort mean) wears the brand.
+  if (count === 1) return "var(--primary)"
   return index < SLOTS ? `var(--chart-${index + 1})` : "var(--muted-foreground)"
 }
 
@@ -100,7 +102,7 @@ function LinePanel({
   const config: ChartConfig = Object.fromEntries(
     series.map((s, i) => [
       `s${i}`,
-      { label: s.display_name, color: seriesColor(i) },
+      { label: s.display_name, color: seriesColor(i, series.length) },
     ])
   )
   const scaled = metric === GLUCO_SCORE && result.agg !== "delta"
@@ -176,7 +178,7 @@ function BarPanel({
     value: valueOf(s.points.at(-1) ?? {}, metric),
   }))
   const config: ChartConfig = {
-    value: { label: metrics.label(metric), color: "var(--chart-1)" },
+    value: { label: metrics.label(metric), color: "var(--primary)" },
   }
   const scaled = metric === GLUCO_SCORE && result.agg !== "delta"
 

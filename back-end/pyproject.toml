@@ -1,7 +1,7 @@
 [project]
 name = "agent"
 version = "0.1.0"
-description = "Read-only agentic reasoning layer for PulseCast wearable risk triage"
+description = "Read-only agentic reasoning layer for Gluco wearable risk triage"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

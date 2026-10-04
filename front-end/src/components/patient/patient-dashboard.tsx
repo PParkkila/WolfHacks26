@@ -63,7 +63,7 @@ export function PatientDashboard({ principal }: { principal: Principal }) {
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">
+        <h1 className="text-2xl font-bold tracking-tight">
           Hi, {principal.display_name}
         </h1>
         <p className="text-muted-foreground">

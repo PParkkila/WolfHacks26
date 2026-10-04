@@ -19,6 +19,7 @@
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
   --color-chart-5: var(--chart-5);
+  --color-brand-track: var(--brand-track);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
   --color-chart-2: var(--chart-2);
@@ -49,73 +50,86 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  /* Categorical series slots, validated for colour-vision deficiency in order. */
+  /*
+   * Gluco design tokens.
+   * Neutrals are a soft grey with a faint teal cast (never pure white or a
+   * blue-black); one accent (teal) marks the brand, primary actions and the
+   * Gluco Score itself. Status and
+   * categorical chart colours are separate and never stand in for the brand.
+   * Shape rule: containers (cards, panels) use --radius-xl, controls --radius-lg,
+   * badges and chips are full pills.
+   */
+  --background: oklch(0.945 0.005 185);
+  --foreground: oklch(0.25 0.012 200);
+  --card: oklch(0.97 0.004 185);
+  --card-foreground: oklch(0.25 0.012 200);
+  --popover: oklch(0.975 0.004 185);
+  --popover-foreground: oklch(0.25 0.012 200);
+  --primary: oklch(0.5 0.08 190);
+  --primary-foreground: oklch(0.98 0.004 185);
+  --secondary: oklch(0.925 0.007 185);
+  --secondary-foreground: oklch(0.3 0.012 200);
+  --muted: oklch(0.925 0.007 185);
+  --muted-foreground: oklch(0.47 0.012 195);
+  --accent: oklch(0.91 0.025 188);
+  --accent-foreground: oklch(0.32 0.05 190);
+  --destructive: oklch(0.55 0.19 27);
+  --border: oklch(0.88 0.007 190);
+  --input: oklch(0.86 0.008 190);
+  --ring: oklch(0.58 0.07 190);
+  /* The unfilled part of the Gluco Score ring: a light step of the brand ramp. */
+  --brand-track: oklch(0.89 0.03 188);
+  /* Categorical series slots, validated for colour-vision deficiency in order
+     against the card surface. Single-series charts use --primary instead. */
   --chart-1: #2a78d6;
   --chart-2: #eb6834;
   --chart-3: #1baf7a;
   --chart-4: #eda100;
   --chart-5: #e87ba4;
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --radius: 0.75rem;
+  --sidebar: oklch(0.955 0.005 185);
+  --sidebar-foreground: oklch(0.25 0.012 200);
+  --sidebar-primary: oklch(0.5 0.08 190);
+  --sidebar-primary-foreground: oklch(0.98 0.004 185);
+  --sidebar-accent: oklch(0.925 0.007 185);
+  --sidebar-accent-foreground: oklch(0.3 0.012 200);
+  --sidebar-border: oklch(0.88 0.007 190);
+  --sidebar-ring: oklch(0.58 0.07 190);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
+  --background: oklch(0.245 0.006 190);
+  --foreground: oklch(0.95 0.004 185);
+  --card: oklch(0.285 0.007 190);
+  --card-foreground: oklch(0.95 0.004 185);
+  --popover: oklch(0.305 0.008 190);
+  --popover-foreground: oklch(0.95 0.004 185);
+  --primary: oklch(0.76 0.09 183);
+  --primary-foreground: oklch(0.22 0.02 190);
+  --secondary: oklch(0.33 0.008 190);
+  --secondary-foreground: oklch(0.95 0.004 185);
+  --muted: oklch(0.33 0.008 190);
+  --muted-foreground: oklch(0.74 0.008 190);
+  --accent: oklch(0.36 0.03 186);
+  --accent-foreground: oklch(0.92 0.03 183);
+  --destructive: oklch(0.7 0.16 24);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --ring: oklch(0.62 0.07 185);
+  --brand-track: oklch(0.38 0.03 186);
   --chart-1: #3987e5;
   --chart-2: #d95926;
   --chart-3: #199e70;
   --chart-4: #c98500;
   --chart-5: #d55181;
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar: oklch(0.285 0.007 190);
+  --sidebar-foreground: oklch(0.95 0.004 185);
+  --sidebar-primary: oklch(0.76 0.09 183);
+  --sidebar-primary-foreground: oklch(0.22 0.02 190);
+  --sidebar-accent: oklch(0.33 0.008 190);
+  --sidebar-accent-foreground: oklch(0.95 0.004 185);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar-ring: oklch(0.62 0.07 185);
 }
 
 @layer base {

@@ -29,7 +29,7 @@ export async function streamSSE(
     })
   } catch (cause) {
     if (init.signal.aborted) throw cause
-    throw new ApiError(0, undefined, "Can't reach the PulseCast API.", cause)
+    throw new ApiError(0, undefined, "Can't reach the Gluco API.", cause)
   }
 
   if (!response.ok || !response.body) {

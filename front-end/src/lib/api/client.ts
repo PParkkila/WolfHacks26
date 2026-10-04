@@ -27,7 +27,7 @@ export class ApiError extends Error {
       typeof record.detail === "string"
         ? record.detail
         : status === 0
-          ? "Can't reach the PulseCast API."
+          ? "Can't reach the Gluco API."
           : `Request failed (${status}).`
     const code = typeof record.code === "string" ? record.code : undefined
     return new ApiError(status, code, message, body)
@@ -68,7 +68,7 @@ export async function unwrap<T>(call: Promise<Result<T>>): Promise<T> {
   try {
     result = await call
   } catch (cause) {
-    throw new ApiError(0, undefined, "Can't reach the PulseCast API.", cause)
+    throw new ApiError(0, undefined, "Can't reach the Gluco API.", cause)
   }
   if (!result.response.ok || result.error !== undefined) {
     throw ApiError.from(result.response.status, result.error)

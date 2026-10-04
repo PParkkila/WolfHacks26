@@ -6,11 +6,11 @@ import {
   MessageSquareIcon,
   PanelRightCloseIcon,
   PlusIcon,
-  SparklesIcon,
   SquareIcon,
 } from "lucide-react"
 import { useState } from "react"
 
+import { GlucoMark } from "@/components/brand"
 import { ChatMessage } from "@/components/chat/chat-message"
 import { useChat } from "@/components/chat/chat-provider"
 import type { Audience } from "@/components/estimate-note"
@@ -120,11 +120,11 @@ function Composer({ audience }: { audience: Audience }) {
     >
       <InputGroup>
         <InputGroupTextarea
-          aria-label="Message the assistant"
+          aria-label="Message Gluco"
           placeholder={
             audience === "patient"
-              ? "Ask about your data…"
-              : "Ask about the cohort or a participant…"
+              ? "Ask Gluco about your data…"
+              : "Ask Gluco about the cohort or a participant…"
           }
           className="max-h-40 min-h-10"
           rows={1}
@@ -167,7 +167,7 @@ function Composer({ audience }: { audience: Audience }) {
       </InputGroup>
       <p className="text-xs text-muted-foreground">
         {audience === "patient"
-          ? "The assistant explains your own data. It can't diagnose or prescribe."
+          ? "Gluco explains your own data. It can't diagnose or prescribe."
           : "Answers come from the published data up to the replay clock. Check before acting."}
       </p>
     </form>
@@ -185,11 +185,14 @@ export function ChatPanel({
     useChat()
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
-      <header className="flex h-12 shrink-0 items-center gap-1 border-b px-3">
-        <SparklesIcon className="size-4 text-muted-foreground" />
-        <h2 className="text-sm font-medium">
-          {audience === "patient" ? "Your assistant" : "Clinical assistant"}
+    <div className="flex h-full min-h-0 flex-col bg-card">
+      <header className="flex h-12 shrink-0 items-center gap-2 border-b px-3">
+        <GlucoMark className="size-5" />
+        <h2 className="flex items-baseline gap-2 text-sm">
+          <span className="font-semibold">Gluco</span>
+          <span className="text-muted-foreground">
+            {audience === "patient" ? "Your assistant" : "Clinical assistant"}
+          </span>
         </h2>
         <div className="ml-auto flex items-center gap-1">
           <ThreadMenu />
@@ -231,13 +234,13 @@ export function ChatPanel({
                 <MessageScrollerItem className="my-auto">
                   <Empty>
                     <EmptyHeader>
-                      <EmptyMedia variant="icon">
-                        <SparklesIcon />
+                      <EmptyMedia variant="icon" className="bg-accent">
+                        <GlucoMark className="size-6" />
                       </EmptyMedia>
                       <EmptyTitle>
                         {audience === "patient"
-                          ? "Ask about your week"
-                          : "Ask about your patients"}
+                          ? "Ask Gluco about your week"
+                          : "Ask Gluco about your patients"}
                       </EmptyTitle>
                       <EmptyDescription>
                         {audience === "patient"
@@ -252,6 +255,7 @@ export function ChatPanel({
                             key={suggestion}
                             variant="outline"
                             size="sm"
+                            className="rounded-full"
                             onClick={() => send(suggestion)}
                           >
                             {suggestion}

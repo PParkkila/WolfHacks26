@@ -1,0 +1,20 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "api",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd back-end && uv run agent serve"],
+      "port": 8000
+    },
+    {
+      "name": "web",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "cd front-end && export PATH=\"$HOME/.bun/bin:$HOME/.nvm/versions/node/v26.10.0/bin:$PATH\" && bun run dev"
+      ],
+      "port": 3000
+    }
+  ]
+}

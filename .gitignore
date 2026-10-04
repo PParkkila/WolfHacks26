@@ -221,6 +221,10 @@ __marimo__/
 node_modules/
 dist/
 
+# Temporary chart extraction artifacts
+.chart-data-Ct7Z5N/
+.chart-data-jYjMUG/
+
 # Local data and Python environment for the Databricks/Tiger prototype
 databricks/local-data/
 databricks/.venv/

@@ -1,0 +1,16 @@
+{
+  "name": "WolfHacks2026",
+  "catalog": "workspace",
+  "schema": "wolfhacks_silver",
+  "serverless": true,
+  "continuous": false,
+  "development": false,
+  "photon": true,
+  "channel": "CURRENT",
+  "root_path": "/Workspace/Users/pbparkki@ncsu.edu/WolfHacks2026",
+  "libraries": [
+    {"file": {"path": "/Workspace/Users/pbparkki@ncsu.edu/WolfHacks26/databricks/tiger/lakeflow_activity_minute_pilot.py"}},
+    {"file": {"path": "/Workspace/Users/pbparkki@ncsu.edu/WolfHacks26/databricks/tiger/lakeflow_shared_units_pilot.py"}},
+    {"file": {"path": "/Workspace/Users/pbparkki@ncsu.edu/WolfHacks26/databricks/tiger/lakeflow_model_tables.py"}}
+  ]
+}

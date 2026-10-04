@@ -1,0 +1,37 @@
+{
+  "run_name": "WolfHacks rolling risk backfill and live-path verification",
+  "timeout_seconds": 1800,
+  "tasks": [
+    {
+      "task_key": "score_existing_history",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/pbparkki@ncsu.edu/WolfHacks26/databricks/tiger/demo_smoke_test",
+        "base_parameters": {"mode": "score_existing", "session_id": "submission-smoke-v1", "risk_model_version": "0006be934ae7480d922f248ddd25a17d"}
+      }
+    },
+    {
+      "task_key": "emit_scored_hour",
+      "depends_on": [{"task_key": "score_existing_history"}],
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/pbparkki@ncsu.edu/WolfHacks26/databricks/tiger/demo_smoke_test",
+        "base_parameters": {"mode": "emit", "session_id": "submission-smoke-v1", "start_offset": "11640", "end_offset": "11700"}
+      }
+    },
+    {
+      "task_key": "ingest_scored_hour",
+      "depends_on": [{"task_key": "emit_scored_hour"}],
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/pbparkki@ncsu.edu/WolfHacks26/databricks/tiger/tiger_to_bronze",
+        "base_parameters": {"tiger_host": "hi70ycj0r6.b4t1dqdug8.tsdb.cloud.timescale.com", "tiger_port": "31994", "lookback_minutes": "60"}
+      }
+    },
+    {
+      "task_key": "publish_scored_hour",
+      "depends_on": [{"task_key": "ingest_scored_hour"}],
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/pbparkki@ncsu.edu/WolfHacks26/databricks/tiger/demo_smoke_test",
+        "base_parameters": {"mode": "refresh", "session_id": "submission-smoke-v1", "start_offset": "11640", "end_offset": "11700"}
+      }
+    }
+  ]
+}

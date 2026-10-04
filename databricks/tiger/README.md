@@ -656,7 +656,8 @@ results. The user confirmed a trailing 24-hour window updated hourly, with a
 seven-day trend; this requires a separately evaluated windowed implementation.
 Retraining and evaluation must still hold out whole participants; all windows
 from one participant stay in the same fold. The reported 86.67% does not measure
-this not-yet-implemented recent-window task or transfer accuracy on IMU50.
+the recent-window task or transfer accuracy on IMU50. The separate 24-hour
+implementation and its own development results are documented below.
 
 ### Agreed dashboard framing: risk indicator and rolling trends
 
@@ -773,9 +774,11 @@ Tables under `workspace.wolfhacks_demo`:
 
 HR comes from BIG IDEAs' supplied HR series where sufficiently covered; IMU50
 HR remains NULL. A copied HR value is tagged synthetic with its donor tuple.
-The `wearable_risk_indicator` remains NULL with an explicit pending-model status:
-these are precomputed **sensor metrics**, not results from a trained 24-hour risk
-model. No model is trained on the synthetic history and no stream is activated.
+In the base `history_metrics_24h` fixture, `wearable_risk_indicator` remains NULL:
+these are precomputed **sensor metrics**, not model outputs. The dashboard
+publisher separately scores them using the trained 24-hour release described
+below. No model is trained on synthetic history, and fixture preparation does
+not activate a stream.
 
 Verified preparation run `969421652848660` completed successfully for fixture
 `nine-day-v1`: 17 personas, 220,320 total minute records, of which 63,334 are
@@ -998,8 +1001,9 @@ Display motion in **g**, wrist skin temperature in **°C**, and heart rate in
 **bpm**. Show a visible “Simulated replay” label, `synthetic_fraction`, and
 missing HR as “Unavailable” (IMU50 has no derived HR yet). Do not label motion
 as validated exercise intensity or skin temperature as fever/body temperature.
-`wearable_risk_indicator` is **null**, with a pending-model status; the completed
-whole-recording classifier must not be substituted for a 24-hour rolling score.
+The original smoke test left `wearable_risk_indicator` **null**. The rolling-risk
+integration below replaces that pending value with a separately trained 24-hour
+score; it does not substitute the whole-recording classifier.
 Participant 015 is a demo persona only, still excluded from model evaluation.
 
 To repeat the same test (idempotent, no new timeline):
@@ -1050,3 +1054,103 @@ in motion mean and/or temperature mean between baseline and final output.
 trend points for BIG IDEAs 001. The finite run terminated; no replay schedule
 was created. These checks do not imply that the frontend, HTTP ingestion API,
 pending rolling risk model, or full 66-person cohort has passed an end-to-end test.
+
+### 24-hour rolling risk integration
+
+`train_rolling_risk.py` constructs real-data, trailing 24-hour windows with
+hourly ends from Silver ACC/temperature minutes. It uses the 15 previously
+approved labeled BIG IDEAs participants and preserves the 015 exclusion.
+Synthetic demo data is never read by training or used for evaluation.
+
+The 12 inputs are motion mean/p90/median/std/p99, skin-temperature mean/std/p10/p90,
+motion–temperature correlation, and motion/temperature first daily-harmonic
+amplitudes. `rolling_risk.py` implements the same features for both training and
+inference. Each window requires at least 1,152 real usable minutes (80% of the
+elapsed 24 hours), with at least 30 in each relative hourly bin. This is an
+engineering quality gate, not a health threshold; gaps are not interpolated.
+
+Outer evaluation leaves one participant out; inner selection uses three folds
+of the participant roster. Equal total participant weights are used in fitting,
+scaling, and window-level metrics. Candidates are a prior baseline, logistic
+regression at C=0.1/1, and a 64-tree depth-3 forest. Selection uses weighted
+balanced accuracy, then log loss. Equal 0.5 predictions deterministically map to
+class 1 for evaluation only; the UI has no validated binary risk threshold.
+
+`wearable_risk_indicator` is **100 × the model's higher-study-group score**:
+an experimental **0–100 cohort-resemblance index**, NOT a calibrated diabetes
+probability, measured glucose, or future clinical-event risk. Report the new
+24-hour evaluation separately from the earlier 86.67% whole-recording result.
+Source-data development remains limited to 15 independent labeled people.
+
+Saved releases: `workspace.wolfhacks_models.rolling_risk_releases`; artifacts:
+`/Volumes/workspace/wolfhacks_models/artifacts/<model_version>/rolling_risk.joblib`.
+Real held-out window predictions are stored in
+`workspace.wolfhacks_features.rolling_risk_training_windows` with their version.
+
+The dashboard publisher now pins a release per session in
+`workspace.wolfhacks_demo.replay_risk_models`. For the 15 training participants,
+demo inference uses their held-out-person model. Other participants use the
+final fitted model and `risk_evaluation=application_unvalidated`. Full-model
+application is not reported as held-out accuracy. Synthetic fraction and
+cross-device limitations remain visible.
+
+Scores are backfilled into the existing seven-day history and recomputed on
+each published hourly window. `risk_change_24h_points` is current score minus
+the score ending 24 hours earlier, or null without that prior window. The
+version, feature contract, model name, held-out/application mode, and training
+range flag are included in the Tiger payload. There are no inferred high/medium/
+low clinical bands. The backend reads the same two dashboard objects as before.
+
+Run training once, then publish and verify one further replay hour:
+
+```bash
+databricks jobs submit --profile wolfhacks --json @databricks/tiger/train_rolling_risk.run.json --no-wait
+# Wait for successful completion before submitting publication.
+databricks jobs submit --profile wolfhacks --json @databricks/tiger/rolling_risk_publish.run.json --no-wait
+```
+
+The publisher's `score_existing` mode backfills without emitting any sensor
+events. `prepare` and `refresh` also score before publishing. Tiger upserts only
+changed payloads, preserving grants and avoiding duplicate windows. Existing
+sessions retain their pinned version; use a new session for a different model.
+The local recording helper continues to work and now includes predictions.
+
+Completed corrected training run **930895403689436**, model release
+**`0006be934ae7480d922f248ddd25a17d`**: 660 qualifying real windows from all
+15 approved participants. Final application estimator: `forest_depth3`.
+
+| Real 24-hour development metric | Nested participant-held-out model | Held-out prior baseline |
+| --- | ---: | ---: |
+| Participant-weighted window accuracy | 60.42% | 53.33% |
+| Participant-weighted window balanced accuracy | 60.03% | 50.00% |
+| Participant-weighted window log loss (lower is better) | 0.8244 | 0.7651 |
+| Participant-weighted window Brier loss (lower is better) | 0.2788 | 0.2857 |
+
+Window ROC AUC is 0.5953. Averaging held-out window scores within each person
+classifies 11/15 people correctly (73.33%), but that is a different aggregation
+and must not be presented as 24-hour window accuracy. Neither statistic is
+external validation. Log loss is worse than the prior baseline; do not claim
+well-calibrated probabilities. The held-out prior's AUC is misleading because
+its probability changes with the omitted person's class; use the documented
+accuracy/loss comparisons instead.
+
+The initial development artifact `7cc76a0dff4949e8b849f0fbaa57406c` is retained
+for provenance but superseded: equal-prior baseline folds were sensitive to
+floating-point ties around 0.5. The corrected run fixes tie handling before
+publication. The selected model's reported window metrics are unchanged.
+See `rolling_risk_evaluation.json` for the corrected complete report, including
+per-person window counts and fold-specific selected models.
+
+Verified publication/replay run **31022209749215** completed all four tasks in
+about three minutes and stopped. The backfill scored all 2,890 existing windows;
+one further replay hour added 17 windows, producing **2,907 scored windows** for
+17 participants. The session now contains 3,060 unique replay events. The new
+1,020-event batch's retry inserted zero duplicates. Twelve participants' scores
+changed in that hour; unchanged scores are retained rather than artificially
+perturbed. BIG IDEAs 001 changed from 15.73 to 16.83 index points.
+
+`dashboard_sample.json` now contains actual scored Tiger snapshots and the last
+168 hourly points for BIG IDEAs 001. The backend uses the unchanged session
+`submission-smoke-v1` and unchanged `gold.dashboard_latest` /
+`gold.dashboard_windows` objects. No database credentials or access grants were
+created/changed by the risk integration, and no ongoing stream was scheduled.

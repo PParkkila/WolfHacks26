@@ -1,0 +1,10 @@
+{
+  "run_name": "WolfHacks 24-hour risk training",
+  "timeout_seconds": 1800,
+  "tasks": [{
+    "task_key": "train_rolling_risk",
+    "notebook_task": {
+      "notebook_path": "/Workspace/Users/pbparkki@ncsu.edu/WolfHacks26/databricks/tiger/train_rolling_risk"
+    }
+  }]
+}

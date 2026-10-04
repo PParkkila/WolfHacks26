@@ -6,7 +6,7 @@ Historical minute summaries are seeded separately, not claimed as live ingestion
 """
 
 # COMMAND ----------
-# MAGIC %pip install "pg8000>=1.31,<2"
+# MAGIC %pip install "pg8000>=1.31,<2" "scikit-learn==1.5.2"
 
 # COMMAND ----------
 dbutils.library.restartPython()
@@ -20,22 +20,25 @@ import ssl
 import sys
 import time
 
+import joblib
 import pg8000.native
 from pyspark.sql import functions as F
 
 sys.path.insert(0, "/Workspace/Users/pbparkki@ncsu.edu/WolfHacks26/databricks/tiger")
 from demo_replay_payload import event_for_minute
+from rolling_risk import FEATURE_VERSION, score_records
 
 for key, default in {
     "mode": "prepare", "session_id": "submission-smoke-v1", "fixture_id": "nine-day-v1",
     "replay_start": "2026-10-04T04:00:00+00:00", "start_offset": "11520", "end_offset": "11580",
     "tiger_host": "hi70ycj0r6.b4t1dqdug8.tsdb.cloud.timescale.com", "tiger_port": "31994",
     "tiger_database": "tsdb", "secret_scope": "wolfhacks",
+    "risk_model_version": "",
 }.items():
     dbutils.widgets.text(key, default)
 p = {key: dbutils.widgets.get(key) for key in (
     "mode", "session_id", "fixture_id", "replay_start", "start_offset", "end_offset",
-    "tiger_host", "tiger_port", "tiger_database", "secret_scope")}
+    "tiger_host", "tiger_port", "tiger_database", "secret_scope", "risk_model_version")}
 session, fixture = p["session_id"], p["fixture_id"]
 if not all(re.fullmatch(r"[a-z0-9-]{1,50}", value) for value in (session, fixture)):
     raise ValueError("Session/fixture must use lowercase letters, digits, hyphens")
@@ -95,12 +98,48 @@ def clean(value):
 
 def publish():
     rows = (spark.table(f"{SCHEMA}.dashboard_windows").where(F.col("session_id") == session)
-            .orderBy("participant_key", "window_end").limit(5001).collect())
-    if not rows or len(rows) > 5000:
+            .orderBy("participant_key", "window_end").limit(15001).collect())
+    if not rows or len(rows) > 15000:
         raise ValueError("Unexpected dashboard size")
     records = [{k: clean(v) for k, v in row.asDict().items()} for row in rows]
-    if any(r["window_minutes"] != 1440 or r["wearable_risk_indicator"] is not None for r in records):
-        raise ValueError("Require full 24-hour windows and honest pending risk")
+    if any(r["window_minutes"] != 1440 for r in records):
+        raise ValueError("Require full 24-hour demo windows")
+    # Pin each session to one release so replay phases cannot silently switch models.
+    spark.sql(f"CREATE TABLE IF NOT EXISTS {SCHEMA}.replay_risk_models (session_id STRING, model_version STRING) USING DELTA")
+    pin = spark.table(f"{SCHEMA}.replay_risk_models").where(F.col("session_id") == session).first()
+    releases = spark.table("workspace.wolfhacks_models.rolling_risk_releases").where(F.col("feature_version") == FEATURE_VERSION)
+    requested = p["risk_model_version"].strip()
+    if pin:
+        if requested and requested != pin.model_version:
+            raise ValueError("This session already has a different pinned risk model; use a new session")
+        releases = releases.where(F.col("model_version") == pin.model_version)
+    elif requested:
+        releases = releases.where(F.col("model_version") == requested)
+    release = releases.orderBy(F.desc("created_at")).first()
+    if release is None or not re.fullmatch(r"[a-f0-9]{32}", release.model_version):
+        raise ValueError("No completed rolling-risk model release available")
+    expected_path = f"/Volumes/workspace/wolfhacks_models/artifacts/{release.model_version}/rolling_risk.joblib"
+    if release.artifact_path != expected_path:
+        raise ValueError("Unexpected model artifact path; only load our own trained artifacts")
+    merge(spark.createDataFrame([(session, release.model_version)], "session_id string, model_version string"),
+          "replay_risk_models", ["session_id"])
+    bundle = joblib.load(expected_path)
+    minutes = (spark.table(f"{SCHEMA}.replay_minutes").where(F.col("session_id") == session)
+               .select("source_participant_key", "minute_offset", "enmo_mean_g", "temperature_mean_c")
+               .limit(1000001).toPandas())
+    if len(minutes) > 1000000:
+        raise ValueError("Demo scoring exceeds the bounded minute budget")
+    records = score_records(records, minutes, bundle)
+    risk_rows = [(session, r["participant_key"], datetime.fromisoformat(r["window_end"]).replace(tzinfo=None),
+                  r["wearable_risk_indicator"], r["risk_status"], r["risk_model_version"],
+                  json.dumps({k: v for k, v in r.items() if k.startswith("risk_")}, allow_nan=False)) for r in records]
+    risk_frame = spark.createDataFrame(risk_rows, "session_id string, participant_key string, window_end timestamp, "
+                                      "wearable_risk_indicator double, risk_status string, risk_model_version string, metadata_json string")
+    merge(risk_frame, "dashboard_risk_scores", ["session_id", "participant_key", "window_end", "risk_model_version"])
+    risk_frame.createOrReplaceTempView("dashboard_risk_increment")
+    spark.sql(f"""MERGE INTO {SCHEMA}.dashboard_windows t USING dashboard_risk_increment s
+        ON t.session_id=s.session_id AND t.participant_key=s.participant_key AND t.window_end=s.window_end
+        WHEN MATCHED THEN UPDATE SET t.wearable_risk_indicator=s.wearable_risk_indicator, t.risk_status=s.risk_status""")
     connection = connect()
     try:
         connection.run("START TRANSACTION")
@@ -113,7 +152,9 @@ def publish():
         connection.run("""INSERT INTO gold.dashboard_windows (session_id, participant_key, window_end, payload)
             SELECT item->>'session_id', item->>'participant_key', (item->>'window_end')::timestamptz, item
             FROM jsonb_array_elements(CAST(:payload AS jsonb)) item
-            ON CONFLICT (session_id, participant_key, window_end) DO NOTHING""",
+            ON CONFLICT (session_id, participant_key, window_end) DO UPDATE
+            SET payload=EXCLUDED.payload, published_at=now()
+            WHERE gold.dashboard_windows.payload IS DISTINCT FROM EXCLUDED.payload""",
             payload=json.dumps(records, allow_nan=False))
         connection.run("""CREATE OR REPLACE VIEW gold.dashboard_latest AS
             SELECT DISTINCT ON (session_id, participant_key) * FROM gold.dashboard_windows
@@ -122,6 +163,12 @@ def publish():
                                session=session)[0][0]
         if count != len(records):
             raise ValueError("Tiger/Delta dashboard counts differ")
+        scored = connection.run("""SELECT count(*) FROM gold.dashboard_windows
+            WHERE session_id=:session AND payload->>'risk_model_version'=:version
+              AND (payload->>'wearable_risk_indicator')::double precision BETWEEN 0 AND 100""",
+            session=session, version=release.model_version)[0][0]
+        if scored != count:
+            raise ValueError("Not all dashboard windows have valid published predictions")
         latest = connection.run("SELECT payload::text FROM gold.dashboard_latest WHERE session_id=:session ORDER BY participant_key",
                                 session=session)
         connection.run("COMMIT")
@@ -130,7 +177,9 @@ def publish():
         raise
     finally:
         connection.close()
-    return {"dashboard_rows": count, "participants": len(latest),
+    return {"dashboard_rows": count, "participants": len(latest), "scored_windows": scored,
+            "risk_model_version": release.model_version, "risk_status": "experimental_demo_cohort_similarity",
+            "risk_model_evaluation": json.loads(release.report_json)["window_metrics_equal_participant_weight"],
             "latest": [json.loads(row[0]) for row in latest],
             "example_trend": [r for r in records if r["participant_key"] == "demo:big_ideas:001"][-168:]}
 
@@ -144,7 +193,7 @@ if saved.fixture_id != fixture or saved.replay_start != anchor.isoformat():
     raise ValueError("Existing session uses different fixture/anchor; choose a new session ID")
 
 result = {"session_id": session, "mode": p["mode"], "continuous_stream_enabled": False,
-          "transport": "direct_tiger_database_not_http", "risk_status": "pending_24h_model"}
+          "transport": "direct_tiger_database_not_http"}
 if p["mode"] == "prepare":
     history = (spark.table(f"{SCHEMA}.history_minutes").where(F.col("fixture_id") == fixture)
                .withColumn("session_id", F.lit(session)).select(*minute_columns))
@@ -214,7 +263,10 @@ elif p["mode"] == "refresh":
     merge(dashboard(metrics), "dashboard_windows", ["session_id", "participant_key", "window_end"])
     result.update(publish())
     result.update({"bronze_replay_events": live.count(), "latest_end_offset": end})
+elif p["mode"] == "score_existing":
+    # Backfill predictions into existing history without emitting more sensor events.
+    result.update(publish())
 else:
-    raise ValueError("mode must be prepare, emit, or refresh")
+    raise ValueError("mode must be prepare, emit, refresh, or score_existing")
 
 dbutils.notebook.exit(json.dumps(result, allow_nan=False))

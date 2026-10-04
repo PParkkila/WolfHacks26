@@ -19,8 +19,16 @@ export interface DashboardWindow {
   motion_hr_correlation: number | null;
   synthetic_minutes: number;
   synthetic_fraction: number;
-  wearable_risk_indicator: number | null; // null while the rolling model is pending
+  wearable_risk_indicator: number | null; // 0–100 cohort-resemblance index, NOT diabetes probability
   risk_status: string;
+  risk_model_version?: string;
+  risk_feature_version?: string;
+  risk_model_name?: string;
+  risk_evaluation?: "held_out_participant_demo" | "application_unvalidated";
+  risk_outside_training_range?: boolean;
+  risk_cross_device_validated?: false;
+  risk_score_unit?: "index_0_100_not_clinical_probability";
+  risk_change_24h_points?: number | null; // index points, not percent; null without prior-day history
   demo_only: true;
   training_eligible: false;
   time_basis: "simulated_event_time";
@@ -32,6 +40,8 @@ export interface DemoDashboardFixture {
   transport: "direct_tiger_database_not_http";
   dashboard_rows: number;
   participants: number;
+  scored_windows?: number;
+  risk_model_version?: string;
   latest: DashboardWindow[];
   example_trend: DashboardWindow[]; // last 168 hourly windows for BIG IDEAs 001
 }

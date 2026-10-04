@@ -1,0 +1,13 @@
+{
+  "run_name": "WolfHacks v2 wearable-model development",
+  "timeout_seconds": 1800,
+  "tasks": [
+    {
+      "task_key": "train",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/pbparkki@ncsu.edu/WolfHacks26/databricks/tiger/train_subject_models",
+        "base_parameters": {"feature_set": "v2"}
+      }
+    }
+  ]
+}

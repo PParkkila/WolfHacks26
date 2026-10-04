@@ -1,0 +1,27 @@
+# Run `just` to list targets. All commands assume the project .venv is active
+# (source .venv/bin/activate) and go through uv.
+
+default:
+    @just --list
+
+# Run the API with the configured DATA_BACKEND
+run:
+    uv run agent serve
+
+# Run the API against the seeded mock data, whatever .env says
+mock:
+    DATA_BACKEND=mock uv run agent serve
+
+# Answer one question in the terminal (no server): just ask "Why is P012 flagged?"
+ask question:
+    uv run agent ask "{{question}}"
+
+# Run the eval set (calls the real model): just eval, or just eval --tier 2
+eval *args:
+    uv run python evals/run.py {{args}}
+
+test:
+    uv run pytest
+
+lint:
+    uv run ruff check . && uv run ruff format --check . && uv run basedpyright

@@ -89,10 +89,9 @@ def download_http(url: str, destination: Path):
     os.replace(partial, destination)
 
 
-def download_big_ideas(output_root: Path, quick: bool, all_subjects: bool):
+def download_big_ideas(output_root: Path, kinds: tuple[str, ...], all_subjects: bool):
     root = output_root / "big_ideas"
     download_http(f"{BIG_S3_URL}/Demographics.csv", root / "Demographics.csv")
-    kinds = BIG_SMALL if quick else BIG_SMALL + BIG_LARGE
     subjects = (f"{number:03d}" for number in range(1, 17)) if all_subjects else ("001",)
     for subject in subjects:
         for kind in kinds:
@@ -102,8 +101,7 @@ def download_big_ideas(output_root: Path, quick: bool, all_subjects: bool):
             else:
                 source = BIG_S3_URL
             download_http(f"{source}/{subject}/{filename}", root / subject / filename)
-    if quick:
-        print("BIG IDEAs: skipped ACC and BVP. Rerun without --quick to add them.")
+    print(f"BIG IDEAs: selected file types: {', '.join(kinds)}")
 
 
 def copy_remote_member(archive, name: str, destination: Path):
@@ -202,6 +200,12 @@ def main():
         help="Skip BIG IDEAs ACC and BVP; add them later by rerunning without --quick",
     )
     parser.add_argument(
+        "--big-kinds",
+        nargs="+",
+        choices=BIG_SMALL + BIG_LARGE,
+        help="Download only these BIG IDEAs file types (overrides --quick)",
+    )
+    parser.add_argument(
         "--imu-zip-only",
         action="store_true",
         help="Keep IMU50 subject compressed for upload and expand it in Databricks",
@@ -210,7 +214,10 @@ def main():
     output_root = args.output_dir.expanduser().resolve()
 
     if args.dataset in ("both", "big"):
-        download_big_ideas(output_root, args.quick, args.all_big)
+        kinds = tuple(args.big_kinds) if args.big_kinds else (
+            BIG_SMALL if args.quick else BIG_SMALL + BIG_LARGE
+        )
+        download_big_ideas(output_root, kinds, args.all_big)
     if args.dataset in ("both", "imu"):
         download_imu50(output_root, args.imu_zip_only)
 

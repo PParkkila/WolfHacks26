@@ -33,6 +33,8 @@ time-series database for live events. Both sources meet in Databricks Bronze.
   subject `001` and IMU50 subject `00`, ready for a manual Volume upload.
 - `extract_uploaded_imu50.py`: expands an uploaded nested IMU50 subject ZIP on
   serverless, so the home upload sends about 0.8 GB instead of 4 GB of CSVs.
+- `activity_minute_pilot.py`: read-only, one-subject acceleration/HR minute
+  summary to inspect motion features and coverage before building Silver.
 
 ## 1. Create the Tiger service
 
@@ -160,6 +162,10 @@ S3 object path returns 404. Use `--dataset big --all-big` to download all 16
 subjects with the current corrected content. The script needs no AWS CLI or
 AWS credentials for this public mirror.
 
+For the small glucose-target audit without downloading every large wearable
+file, use `--dataset big --all-big --big-kinds Dexcom`. Completed local files
+are skipped.
+
 It reads only the nested IMU50 subject ZIP from Zenodo. Add `--quick` to skip
 BIG IDEAs ACC and BVP for a smaller initial pilot; rerun without it later to
 fill those in. Existing completed files are skipped, and interrupted BIG IDEAs
@@ -242,6 +248,24 @@ Do not interpret IMU50 units, timezone, or coded subject metadata until its
 source documentation supports that interpretation. Its 128 Hz IMU and 25 Hz
 PPG rows repeat whole-second timestamps, so future Bronze parsing must preserve
 the source row/sample ordinal.
+
+### One-subject motion + heart-rate pilot
+
+After BIG IDEAs `ACC_001.csv` and `HR_001.csv` are uploaded, import
+`activity_minute_pilot.py` as a Databricks notebook and run it on serverless
+with these widgets:
+
+```text
+volume_root = /Volumes/workspace/wolfhacks_raw/source_files
+subject_id = 001
+```
+
+The notebook converts Empatica E4 accelerometer counts to g using 64 counts
+per g, calculates one-minute ENMO movement summaries, and averages the HR
+readings sharing a minute timestamp. The output shows minute coverage and
+sample rows. It only creates a temporary view, `activity_minute_pilot`; it
+does not write a Silver table or label exercise intensity. Review timestamps,
+coverage, and HR overlap before promoting this logic to Lakeflow.
 
 ## 7. Store Tiger credentials in Databricks Secrets
 

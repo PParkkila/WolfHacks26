@@ -225,3 +225,4 @@ dist/
 databricks/local-data/
 databricks/.venv/
 pilot-data/
+node_modules

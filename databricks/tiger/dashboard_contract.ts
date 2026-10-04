@@ -29,6 +29,11 @@ export interface DashboardWindow {
   risk_cross_device_validated?: false;
   risk_score_unit?: "index_0_100_not_clinical_probability";
   risk_change_24h_points?: number | null; // index points, not percent; null without prior-day history
+  latest_sensor_time?: string; // simulated event time, independent of the hourly risk window
+  latest_motion_g?: number;
+  latest_skin_temperature_c?: number;
+  latest_hr_bpm?: number | null;
+  latest_sensor_is_synthetic?: boolean;
   demo_only: true;
   training_eligible: false;
   time_basis: "simulated_event_time";

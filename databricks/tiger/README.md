@@ -1154,3 +1154,128 @@ perturbed. BIG IDEAs 001 changed from 15.73 to 16.83 index points.
 `submission-smoke-v1` and unchanged `gold.dashboard_latest` /
 `gold.dashboard_windows` objects. No database credentials or access grants were
 created/changed by the risk integration, and no ongoing stream was scheduled.
+
+### October 4 overnight preparation and continuous judging session
+
+The user authorized local preparation on the connected M1 Mac until **8 a.m.
+Eastern October 4**, then recording and a **noon–3 p.m.** judging replay (official
+judging 12:30–2:30). No Databricks compute is started by overnight preparation.
+The morning compact-data registration/test and event-time replay do use compute.
+
+`prepare_overnight.py` downloads IMU50 subjects 01–49, smallest ZIPs first, one at
+a time. It reads CSVs in 250,000-row chunks directly from the nested ZIP; it does
+not expand multi-GB CSVs onto the SSD. It computes real minute summaries, then
+the same clearly labeled nine-day demo fixture and 168 precomputed hourly
+scores. The existing 15-person model is reused, not retrained. This processes
+ACC/temperature across additional participants, not every sensor modality.
+
+Completed compact files are uploaded through the Databricks file API to:
+
+```text
+/Volumes/workspace/wolfhacks_raw/source_files/prepared_replay/overnight-v1/imu50/<id>/
+  real_minutes.parquet
+  minute_bank.parquet
+  history_metrics.json
+  manifest.json
+```
+
+The manifest is uploaded last and contains row counts, provenance, file sizes,
+and SHA-256 digests. Local processing is explicitly labeled `local_mac` rather
+than claimed as Databricks raw processing. The worker only removes its own
+temporary subject ZIP/partial file; those can be downloaded again from the
+public source. Existing `pilot-data` files are never deleted. Task storage stops
+at 9 GiB or when free disk falls below 5 GiB. An absolute alarm stops the worker
+at 8 a.m. Completed outputs survive interruption and can be reused on restart.
+
+Local controls (from the repository root):
+
+```bash
+databricks/.overnight-venv/bin/python databricks/tiger/overnight_control.py status
+databricks/.overnight-venv/bin/python databricks/tiger/overnight_control.py stop
+```
+
+The initial local check on subject 00 matched 52,024,832 ACC rows, 6,777
+temperature rows and 6,188 synthetic fixture minutes. It produced under 1 MB of
+compact outputs and uploaded them successfully without starting compute.
+
+At/after 8 a.m., `register_overnight.py` combines complete, integrity-checked new
+subjects with the existing 17-person fixture and freezes its roster as
+`overnight-v1`. Subject 00 is not counted twice. Never claim all 66 until the
+actual ready roster confirms 66. The original `nine-day-v1` fixture and
+`submission-smoke-v1` dashboard remain intact as the working fallback.
+
+#### A continuous user history, not a fresh session each time
+
+Use **`continuous-oct4-v1`** for both recording and judging after its morning
+preparation succeeds. Its fixed simulated event clock starts at **7 a.m.
+Eastern October 4**, with eight input days before that anchor. Each person keeps
+their identity and history. The local controller persists the last successfully
+processed minute and any pending job in `databricks/local-data/continuous-demo/`.
+
+```bash
+# Blocked before 8 a.m.; registers compact files, seeds history and pins a model.
+databricks/.overnight-venv/bin/python databricks/tiger/continuous_demo.py prepare
+
+# Catch up every missing minute through the current clock; no reset or duplicates.
+databricks/.overnight-venv/bin/python databricks/tiger/continuous_demo.py advance
+
+# Scheduled for noon; accepts starts only between noon and 3 p.m. on October 4.
+databricks/.overnight-venv/bin/python databricks/tiger/continuous_demo.py judge --background
+
+databricks/.overnight-venv/bin/python databricks/tiger/continuous_demo.py status
+databricks/.overnight-venv/bin/python databricks/tiger/continuous_demo.py stop
+```
+
+The default judging transport uses **15-minute micro-batches**. Every simulated
+minute is represented; the backend should not imply second-by-second transport.
+Gaps between recording and judging are caught up in batches of at most 60 minutes.
+Risk windows update hourly. Previously calculated scores are reused under the
+session's pinned model, avoiding repeated seven-day inference on every batch.
+Only successful complete runs advance the cursor. A retry uses stable event IDs.
+At 3 p.m. no new batches are launched and the controller cancels its own pending
+run, if needed. A partial cancelled batch must be reported, not called complete.
+
+Latest payloads also expose `latest_sensor_time`, `latest_motion_g`,
+`latest_skin_temperature_c`, `latest_hr_bpm`, and `latest_sensor_is_synthetic`.
+Use those for current sensor cards; use `window_end` for the last completed
+hourly risk window and `published_at` for actual processing freshness. Show the
+simulated-data badge and indicate a paused/stale pipeline honestly even though
+the underlying simulated timeline is continuous.
+
+Local schedules check preparation every 30 minutes, launch judging at noon, and
+verify stopping at 3 p.m. They need this Mac on, lid open, connected to power,
+and the Codex app running. A temporary sleep-prevention process covers the demo
+window; it does not change persistent power settings. Public-source speed and
+Databricks Free Edition quotas still limit what can be completed. The expanded
+roster's remote registration and replay are verified in the morning, not by the
+storage-only overnight upload.
+
+#### Morning verification — October 4, 2026
+
+The expanded session **`continuous-oct4-v1` is verified for all 66 participants**
+(16 BIG IDEAs + 50 IMU50; separate identities, not matched subjects).
+All 49 additional uploaded manifests were checked, and registration verified
+file hashes before freezing the roster. Preparation run `220148463930322`
+succeeded and published 11,088 scored history windows to Tiger.
+
+Catch-up runs `303830614582900` and `1059862920828150` then succeeded through
+offset 11600 (exclusive): 5,280 unique replay minutes, 80 per participant,
+covering 7:00–8:19 a.m. Eastern with no missing/duplicate Bronze minute keys.
+The first batch's duplicate retry inserted zero rows. Tiger now has 11,154
+scored windows, 66 latest participant payloads, sensor time 8:19 a.m. and last
+completed risk window 8:00 a.m. The bounded morning run is stopped, not live;
+the noon controller resumes this same cursor and catches up intervening minutes.
+
+Backend: query `gold.dashboard_latest` and `gold.dashboard_windows` with
+`session_id = 'continuous-oct4-v1'` using the read-only role. The original
+`submission-smoke-v1` session remains separate. A saved 66-person response and
+168-point example trend are in
+`databricks/local-data/continuous-demo/latest_dashboard.json` (local, ignored).
+See `dashboard_queries.sql` for parameterized queries. These are experimental
+cohort-similarity scores, not validated diabetes probabilities; synthetic demo
+extensions remain labeled and excluded from training.
+
+The local IMU50 preparation (including the subject-00 validation) read
+3,031,935,104 acceleration samples and 394,867 temperature rows. This was local
+raw preprocessing, not a claim that Databricks processed those raw rows overnight.
+Compact local outputs occupy about 48 MB; existing pilot files were preserved.

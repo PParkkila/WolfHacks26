@@ -1,5 +1,5 @@
 -- Backend-only, use a read-only Tiger role. Bind parameters instead of string interpolation.
--- $1 = session_id, initially submission-smoke-v1.
+-- $1 = session_id: continuous-oct4-v1 (66 people); submission-smoke-v1 remains the 17-person fallback.
 SELECT payload, published_at
 FROM gold.dashboard_latest
 WHERE session_id = $1
@@ -17,11 +17,11 @@ WHERE session_id = $1 AND participant_key = $2
   )
 ORDER BY window_end;
 
--- Recording sanity check: 17 rows per hourly window; count increases as replay advances.
+-- Recording sanity check: 66 rows per hourly window in continuous-oct4-v1.
 SELECT session_id, count(*) AS windows, count(DISTINCT participant_key) AS participants,
        min(window_end) AS first_window_end, max(window_end) AS latest_window_end
 FROM gold.dashboard_windows
-WHERE session_id = 'submission-smoke-v1'
+WHERE session_id = $1
 GROUP BY session_id;
 
 -- Prediction availability. A scored session should have no pending/null scores.

@@ -47,10 +47,16 @@ if anchor.tzinfo is None:
     raise ValueError("replay_start must be timezone-aware")
 anchor = anchor.astimezone(timezone.utc)
 start, end = int(p["start_offset"]), int(p["end_offset"])
-if not 11520 <= start < end <= 12960 or start % 60 or end % 60 or end - start > 60:
-    raise ValueError("Each finite batch must contain exactly one reserved replay hour")
+if not 11520 <= start < end <= 12960 or end - start > 60:
+    raise ValueError("Each finite batch must contain 1–60 reserved replay minutes")
 spark.conf.set("spark.sql.session.timeZone", "UTC")
 SCHEMA = "workspace.wolfhacks_demo"
+roster = sorted(row.source_participant_key for row in spark.table(f"{SCHEMA}.minute_bank")
+                .where(F.col("fixture_id") == fixture).select("source_participant_key").distinct().collect())
+allowed = {f"big_ideas:{i:03d}" for i in range(1, 17)} | {f"imu50:{i:02d}" for i in range(50)}
+if not roster or not set(roster).issubset(allowed):
+    raise ValueError("Missing or invalid fixture roster")
+participant_count = len(roster)
 signals = ["enmo_mean_g", "enmo_std_g", "enmo_p95_g", "temperature_mean_c", "hr_mean_bpm"]
 minute_columns = ["session_id", "fixture_id", "demo_participant_key", "source_participant_key",
                   "source_dataset", "unit_status", "minute_offset", *signals, "is_synthetic"]
@@ -125,11 +131,47 @@ def publish():
           "replay_risk_models", ["session_id"])
     bundle = joblib.load(expected_path)
     minutes = (spark.table(f"{SCHEMA}.replay_minutes").where(F.col("session_id") == session)
-               .select("source_participant_key", "minute_offset", "enmo_mean_g", "temperature_mean_c")
+               .select("source_participant_key", "minute_offset", "enmo_mean_g", "temperature_mean_c", "hr_mean_bpm", "is_synthetic")
                .limit(1000001).toPandas())
     if len(minutes) > 1000000:
         raise ValueError("Demo scoring exceeds the bounded minute budget")
-    records = score_records(records, minutes, bundle)
+    # Reuse immutable scores for the session's pinned model. Between hourly
+    # boundaries only current sensor cards need updating, not seven days of ML.
+    cached = {}
+    if spark.catalog.tableExists(f"{SCHEMA}.dashboard_risk_scores"):
+        for row in (spark.table(f"{SCHEMA}.dashboard_risk_scores")
+                    .where((F.col("session_id") == session) & (F.col("risk_model_version") == release.model_version))
+                    .limit(15001).collect()):
+            cached[(row.participant_key, clean(row.window_end))] = row
+    unscored = []
+    for record in records:
+        previous = cached.get((record["participant_key"], record["window_end"]))
+        if previous:
+            record.update(json.loads(previous.metadata_json))
+            record["wearable_risk_indicator"] = previous.wearable_risk_indicator
+            record["risk_status"] = previous.risk_status
+        else:
+            unscored.append(record)
+    if unscored:
+        score_records(unscored, minutes, bundle)
+    by_window = {(r["participant_key"], r["window_end_offset_minutes"]): r for r in records}
+    for record in records:
+        previous = by_window.get((record["participant_key"], record["window_end_offset_minutes"] - 1440))
+        record["risk_change_24h_points"] = (record["wearable_risk_indicator"] - previous["wearable_risk_indicator"]
+                                            if previous else None)
+    # Current sensor values may update between hourly risk windows. Keep sensor
+    # event time separate from the last completed risk window and publication time.
+    for key, part in minutes.groupby("source_participant_key"):
+        current = part.loc[part.minute_offset.idxmax()]
+        latest_record = max((r for r in records if r["source_participant_key"] == key),
+                            key=lambda r: r["window_end_offset_minutes"])
+        latest_record.update({
+            "latest_sensor_time": (anchor + timedelta(minutes=int(current.minute_offset) - 11520)).isoformat(),
+            "latest_motion_g": float(current.enmo_mean_g),
+            "latest_skin_temperature_c": float(current.temperature_mean_c),
+            "latest_hr_bpm": clean(float(current.hr_mean_bpm)) if current.hr_mean_bpm is not None else None,
+            "latest_sensor_is_synthetic": bool(current.is_synthetic),
+        })
     risk_rows = [(session, r["participant_key"], datetime.fromisoformat(r["window_end"]).replace(tzinfo=None),
                   r["wearable_risk_indicator"], r["risk_status"], r["risk_model_version"],
                   json.dumps({k: v for k, v in r.items() if k.startswith("risk_")}, allow_nan=False)) for r in records]
@@ -191,14 +233,20 @@ merge(session_frame, "replay_sessions", ["session_id"])
 saved = spark.table(f"{SCHEMA}.replay_sessions").where(F.col("session_id") == session).first()
 if saved.fixture_id != fixture or saved.replay_start != anchor.isoformat():
     raise ValueError("Existing session uses different fixture/anchor; choose a new session ID")
+spark.sql(f"CREATE TABLE IF NOT EXISTS {SCHEMA}.session_rosters (session_id STRING, roster_json STRING) USING DELTA")
+saved_roster = spark.table(f"{SCHEMA}.session_rosters").where(F.col("session_id") == session).first()
+if saved_roster and json.loads(saved_roster.roster_json) != roster:
+    raise ValueError("Cannot change participants during an existing replay session")
+merge(spark.createDataFrame([(session, json.dumps(roster))], "session_id string, roster_json string"),
+      "session_rosters", ["session_id"])
 
 result = {"session_id": session, "mode": p["mode"], "continuous_stream_enabled": False,
           "transport": "direct_tiger_database_not_http"}
 if p["mode"] == "prepare":
     history = (spark.table(f"{SCHEMA}.history_minutes").where(F.col("fixture_id") == fixture)
                .withColumn("session_id", F.lit(session)).select(*minute_columns))
-    if history.count() != 17 * 11520:
-        raise ValueError("Expected 17 prepared demo participants with eight input days each")
+    if history.count() != participant_count * 11520:
+        raise ValueError("Expected eight input days per prepared participant")
     merge(history, "replay_minutes", ["session_id", "demo_participant_key", "minute_offset"])
     metrics = spark.table(f"{SCHEMA}.history_metrics_24h").where(F.col("fixture_id") == fixture)
     merge(dashboard(metrics), "dashboard_windows", ["session_id", "participant_key", "window_end"])
@@ -207,7 +255,7 @@ elif p["mode"] == "emit":
     rows = (spark.table(f"{SCHEMA}.minute_bank").where(
         (F.col("fixture_id") == fixture) & (F.col("minute_offset") >= start) & (F.col("minute_offset") < end))
         .orderBy("minute_offset", "demo_participant_key").collect())
-    if len(rows) != 17 * (end - start):
+    if len(rows) != participant_count * (end - start):
         raise ValueError("Incomplete reserved replay hour")
     events = [event_for_minute(row.asDict(), session, anchor) for row in rows]
     query = """INSERT INTO raw.sensor_events
@@ -242,13 +290,14 @@ elif p["mode"] == "refresh":
         get("demo.unit_status").alias("unit_status"), F.col("sequence_number").cast("int").alias("minute_offset"),
         *[get(c).cast("double").alias(c) for c in signals], get("demo.is_synthetic").cast("boolean").alias("is_synthetic"))
     live = live.where((F.col("minute_offset") >= 11520) & (F.col("minute_offset") < end))
-    if live.count() != 17 * (end - 11520):
+    if live.count() != participant_count * (end - 11520):
         raise ValueError("Missing/duplicate Bronze replay events; do not publish incomplete windows")
     if live.groupBy("demo_participant_key", "minute_offset").count().where("count <> 1").limit(1).count():
         raise ValueError("Duplicate minute keys in Bronze")
     merge(live.select(*minute_columns), "replay_minutes", ["session_id", "demo_participant_key", "minute_offset"])
+    score_end = (end // 60) * 60
     trailing = spark.table(f"{SCHEMA}.replay_minutes").where(
-        (F.col("session_id") == session) & (F.col("minute_offset") >= end - 1440) & (F.col("minute_offset") < end))
+        (F.col("session_id") == session) & (F.col("minute_offset") >= score_end - 1440) & (F.col("minute_offset") < score_end))
     metrics = trailing.groupBy("fixture_id", "demo_participant_key", "source_participant_key", "source_dataset", "unit_status").agg(
         F.count("*").alias("window_minutes"), F.avg("enmo_mean_g").alias("motion_mean_g"),
         F.stddev_samp("enmo_mean_g").alias("motion_std_g"), F.percentile_approx("enmo_mean_g", .9, 1000).alias("motion_p90_g"),
@@ -257,7 +306,7 @@ elif p["mode"] == "refresh":
         F.corr("enmo_mean_g", "hr_mean_bpm").alias("motion_hr_correlation"),
         F.sum(F.col("is_synthetic").cast("int")).alias("synthetic_minutes"))
     metrics = (metrics.withColumn("synthetic_fraction", F.col("synthetic_minutes") / 1440)
-               .withColumn("window_end_offset_minutes", F.lit(end))
+               .withColumn("window_end_offset_minutes", F.lit(score_end))
                .withColumn("wearable_risk_indicator", F.lit(None).cast("double"))
                .withColumn("risk_status", F.lit("pending_24h_model_not_a_glucose_measurement")))
     merge(dashboard(metrics), "dashboard_windows", ["session_id", "participant_key", "window_end"])

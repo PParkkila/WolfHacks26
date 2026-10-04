@@ -1,7 +1,7 @@
 """Run evals/cases.yaml through the real agent stack and report pass/fail.
 
-Uses the real model (needs LLM_API_KEY and AGENT_MODEL) and whichever
-DATA_BACKEND is configured; the seeded cases assume the mock backend.
+Uses the real model (needs LLM_API_KEY and AGENT_MODEL) and whichever data
+backend is configured, as of the newest data (the replay clock is off).
 
     uv run python evals/run.py [--tier 2] [--only 9 10 11] [--include-planned]
 """
@@ -10,6 +10,7 @@ import argparse
 import asyncio
 import re
 import sys
+import tempfile
 import time
 import uuid
 from dataclasses import dataclass
@@ -18,16 +19,20 @@ from typing import Any
 
 import yaml
 
+from agent.analysis.ids import resolve_participant
+from agent.auth import CLINICIAN, Principal, patient
 from agent.bootstrap import Runtime, build_runtime
+from agent.config import Settings
 from agent.domain.events import EventHandler
 
 CASES_PATH = Path(__file__).parent / "cases.yaml"
-PERSON_ID = re.compile(r"\bP\d{3}\b")
+PERSON_ID = re.compile(r"\bPatient (?:IMU-)?\d{2,3}\b")
 
 
 @dataclass
 class CaseOutcome:
     case_id: int
+    who: str
     question: str
     tools: list[str]
     answer: str
@@ -90,11 +95,18 @@ class _Collector(EventHandler):
         self.ungrounded = data.get("ungrounded_numbers", [])
 
 
+def principal_for(runtime: Runtime, case: dict) -> Principal:
+    who = str(case.get("as", "clinician"))
+    if who == "clinician":
+        return CLINICIAN
+    return patient(resolve_participant(who, runtime.store.participants()))
+
+
 async def run_case(runtime: Runtime, case: dict) -> CaseOutcome:
     started = time.perf_counter()
     collector = _Collector()
     async for event in runtime.chat.stream(
-        f"eval-{uuid.uuid4().hex}", case["question"]
+        principal_for(runtime, case), f"eval-{uuid.uuid4().hex}", case["question"]
     ):
         collector.handle(event)
     answer = "".join(collector.tokens)
@@ -103,6 +115,7 @@ async def run_case(runtime: Runtime, case: dict) -> CaseOutcome:
         failures.append(f"numbers not found in any tool result: {collector.ungrounded}")
     return CaseOutcome(
         case["id"],
+        str(case.get("as", "clinician")),
         case["question"],
         collector.tools,
         answer,
@@ -119,12 +132,18 @@ async def main(args: argparse.Namespace) -> int:
         cases = [c for c in cases if not c.get("planned")]
     if args.only:
         cases = [c for c in cases if c["id"] in args.only]
-    runtime = build_runtime()
+    # As of the newest data, and with throwaway chat memory so eval threads never
+    # show up in a persona's conversation list.
+    scratch = Path(tempfile.mkdtemp(prefix="pulsecast-evals-"))
+    settings = Settings(  # pyright: ignore[reportCallIssue]
+        replay_enabled=False, session_db_path=scratch / "sessions.sqlite"
+    )
+    runtime = build_runtime(settings)
 
     outcomes = [await run_case(runtime, case) for case in cases]
     for o in outcomes:
         status = "PASS" if o.passed else "FAIL"
-        print(f"[{status}] #{o.case_id:<2} {o.seconds:5.1f}s  {o.question}")
+        print(f"[{status}] #{o.case_id:<2} {o.seconds:5.1f}s  {o.who:<11} {o.question}")
         print(f"        tools: {o.tools or 'none'}")
         for failure in o.failures:
             print(f"        - {failure}")

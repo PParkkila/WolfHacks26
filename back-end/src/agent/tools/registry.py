@@ -1,16 +1,13 @@
-"""The single list of tool groups. Adding a tool group is one line here."""
-
-from collections.abc import Callable
+"""Which tools each role gets. Adding a tool group is one line here."""
 
 from agents import FunctionTool
 
-from agent.tools import cohort, quality, risk
-from agent.tools.base import ToolDeps
-
-ToolGroup = Callable[[ToolDeps], list[FunctionTool]]
-
-TOOL_GROUPS: tuple[ToolGroup, ...] = (risk.build, cohort.build, quality.build)
+from agent.query import QueryService
+from agent.tools import clinician, patient
 
 
-def build_tools(deps: ToolDeps) -> list[FunctionTool]:
-    return [tool for group in TOOL_GROUPS for tool in group(deps)]
+def build_tools(svc: QueryService) -> list[FunctionTool]:
+    """The tools for the service's user, bound to that user's scope."""
+    if svc.principal.role == "clinician":
+        return clinician.build(svc)
+    return patient.build(svc)

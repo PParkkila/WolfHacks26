@@ -11,8 +11,9 @@ from typing import Any
 from agents import Agent, InputGuardrailTripwireTriggered, MaxTurnsExceeded, Runner
 
 from agent.analysis.grounding import ungrounded_numbers
-from agent.api.sessions import SessionFactory
+from agent.api.sessions import ChatSessions
 from agent.api.sse import StreamTranslator
+from agent.auth import Principal
 from agent.domain.events import SseEvent
 from agent.guardrails import decline_message
 from agent.observability.trace import Outcome, Tracer
@@ -21,29 +22,36 @@ log = logging.getLogger(__name__)
 
 MAX_TURNS_REPLY = (
     "I couldn't finish working that out within my step limit. "
-    "Try a narrower question, for example about one person."
+    "Try a narrower question, for example about one metric or one day."
 )
 
 RunStreamed = Callable[..., Any]
+AgentFactory = Callable[[Principal], Agent]
 
 
 class ChatService:
+    """Streams one user's turn through the agent built for their role."""
+
     def __init__(
         self,
-        agent: Agent,
-        sessions: SessionFactory,
+        agents: AgentFactory,
+        sessions: ChatSessions,
         tracer: Tracer,
         max_turns: int,
         run_streamed: RunStreamed = Runner.run_streamed,
     ) -> None:
-        self._agent = agent
+        self._agents = agents
         self._sessions = sessions
         self._tracer = tracer
         self._max_turns = max_turns
         self._run_streamed = run_streamed
 
-    async def stream(self, session_id: str, message: str) -> AsyncIterator[SseEvent]:
-        recorder = self._tracer.start(session_id, message)
+    async def stream(
+        self, principal: Principal, session_id: str, message: str
+    ) -> AsyncIterator[SseEvent]:
+        recorder = self._tracer.start(
+            ChatSessions.key(principal.user_id, session_id), message
+        )
         translator = StreamTranslator()
         outcome: Outcome = "cancelled"  # stays so if the client disconnects
         failure: str | None = None
@@ -52,10 +60,11 @@ class ChatService:
         pending: list[SseEvent] = []
         try:
             try:
+                self._sessions.touch(principal.user_id, session_id, message)
                 result = self._run_streamed(
-                    self._agent,
+                    self._agents(principal),
                     message,
-                    session=self._sessions(session_id),
+                    session=self._sessions.open(principal.user_id, session_id),
                     max_turns=self._max_turns,
                 )
                 async for raw in result.stream_events():
@@ -72,7 +81,9 @@ class ChatService:
                     log.warning("answer states ungrounded numbers: %s", ungrounded)
             except InputGuardrailTripwireTriggered as exc:
                 outcome = "declined"
-                pending.append(SseEvent("token", {"text": decline_message(exc)}))
+                pending.append(
+                    SseEvent("token", {"text": decline_message(exc, principal.role)})
+                )
             except MaxTurnsExceeded:
                 outcome = "max_turns"
                 pending.append(SseEvent("token", {"text": MAX_TURNS_REPLY}))

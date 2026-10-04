@@ -61,7 +61,8 @@ class StreamTranslator:
             if event.name == "tool_called":
                 return [self._tool_start(event.item)]
             if event.name == "tool_output":
-                return [self._tool_end(event.item)]
+                end = self._tool_end(event.item)
+                return [end, *self._chart(end, event.item.output)]
         return []
 
     def _tool_start(self, item: Any) -> SseEvent:
@@ -80,6 +81,22 @@ class StreamTranslator:
                 "args": _parse_args(_field(raw, "arguments")),
             },
         )
+
+    @staticmethod
+    def _chart(end: SseEvent, output: Any) -> list[SseEvent]:
+        """A `data` event when the tool returned series to draw."""
+        if not isinstance(output, dict) or not isinstance(output.get("chart"), dict):
+            return []
+        return [
+            SseEvent(
+                "data",
+                {
+                    "call_id": end.data["call_id"],
+                    "tool": end.data["tool"],
+                    "chart": output["chart"],
+                },
+            )
+        ]
 
     def _tool_end(self, item: Any) -> SseEvent:
         call_id = _field(item.raw_item, "call_id")

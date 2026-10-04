@@ -1,21 +1,21 @@
-"""Composition point: the only module that knows both concrete backends."""
+"""Composition point: the only module that knows both concrete sources."""
 
 from agent.config import Settings
-from agent.data.mock import MockBackend
-from agent.data.postgres import PostgresBackend
-from agent.domain.ports import Repositories
+from agent.data.mock import MockSource
+from agent.data.postgres import PostgresSource
+from agent.domain.ports import WindowSource
 
 
-def build_repositories(settings: Settings) -> Repositories:
-    if settings.data_backend == "postgres":
-        if settings.database_url is None:
-            raise ValueError("DATA_BACKEND=postgres requires DATABASE_URL")
-        backend = PostgresBackend(
-            settings.database_url.get_secret_value(),
-            settings.statement_timeout_ms,
-            settings.stats_ttl_s,
+def build_source(settings: Settings) -> WindowSource:
+    if settings.effective_backend == "postgres":
+        conninfo = settings.database_conninfo
+        if conninfo is None:
+            raise ValueError(
+                "DATA_BACKEND=postgres requires DATABASE_URL or the PG* variables"
+            )
+        source = PostgresSource(
+            conninfo, settings.dashboard_session_id, settings.statement_timeout_ms
         )
-        backend.check_read_only()
-    else:
-        backend = MockBackend(seed=settings.mock_seed)
-    return Repositories(risk=backend, features=backend, stats=backend, health=backend)
+        source.check_read_only()
+        return source
+    return MockSource(seed=settings.mock_seed)

@@ -12,9 +12,10 @@ run:
 mock:
     DATA_BACKEND=mock uv run agent serve
 
-# Answer one question in the terminal (no server): just ask "Why is P012 flagged?"
-ask question:
-    uv run agent ask "{{question}}"
+# One question in the terminal (no server): just ask "Who needs follow-up?"
+# As a patient: just ask "Why did my score drop?" 13
+ask question who="clinician":
+    uv run agent ask --as "{{who}}" "{{question}}"
 
 # Run the eval set (calls the real model): just eval, or just eval --tier 2
 eval *args:
@@ -22,6 +23,10 @@ eval *args:
 
 test:
     uv run pytest
+
+# Read-only checks against the real database configured in .env
+test-live:
+    LIVE_DB=1 uv run pytest tests/test_postgres_live.py -v
 
 lint:
     uv run ruff check . && uv run ruff format --check . && uv run basedpyright

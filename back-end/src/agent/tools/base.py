@@ -1,13 +1,11 @@
 """Conventions every tool follows.
 
 - Returns a JSON-able dict, never prose.
-- Carries `summary` and `rows` (read by the SSE layer for `tool_end`).
-- Carries `model_version` and `window`. Single-person tools fill `window` with the
-  window they used; list tools carry it per row and leave `window` null.
-- Model output (`score`, `label`, `confidence`) is nulled, with `suppressed` true,
-  whenever the result is not reliable, so the model cannot quote what the policy
-  says is untrustworthy.
-- Caps rows at MAX_ROWS and says so when it truncates.
+- Carries `summary` and `rows` (read by the SSE layer for `tool_end`) and `as_of`
+  (the replay clock's "now", so the agent never guesses what "today" is).
+- Series data goes under `chart`, in the same shape `POST /query` returns. The
+  SSE layer forwards it as a `data` event so the UI can draw it inline, and the
+  LLM reads its numbers from the same place.
 - Never raises: a failure becomes `{"error": ...}` the agent can explain,
   because an exception would kill the stream mid-answer.
 """
@@ -15,132 +13,83 @@
 import functools
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Self
+from typing import Any
 
-from agent.analysis.quality import ReliabilityPolicy
-from agent.assessment import Assessment, Assessor
-from agent.domain.models import RiskScore
-from agent.domain.ports import CohortStatsRepository, FeatureRepository, Repositories
-from agent.explanation import Explainer
+from pydantic import BaseModel
+
+from agent.analysis.query import downsample
+from agent.domain.errors import (
+    AmbiguousPersonError,
+    ForbiddenError,
+    PersonNotFoundError,
+    QueryError,
+)
+from agent.query import QueryResult
 
 log = logging.getLogger(__name__)
 
 MAX_ROWS = 200
+CHART_POINTS = 48  # per series, for anything handed to the LLM
+LLM_POINT_BUDGET = 240  # across all series of one tool result
 
 
-@dataclass(frozen=True)
-class ToolDeps:
-    """What tools are built from: services and read ports, never the whole backend."""
-
-    assessor: Assessor
-    explainer: Explainer
-    features: FeatureRepository
-    stats: CohortStatsRepository
-
-    @classmethod
-    def from_repos(cls, repos: Repositories, policy: ReliabilityPolicy) -> Self:
-        return cls(
-            assessor=Assessor(repos.risk, policy),
-            explainer=Explainer(repos.features, repos.stats),
-            features=repos.features,
-            stats=repos.stats,
-        )
+def dump(model: BaseModel) -> dict[str, Any]:
+    return model.model_dump(mode="json")
 
 
-class PersonNotFoundError(LookupError):
-    """Raised inside a tool; `safe_tool` turns it into a `not_found` payload."""
+def chart(result: QueryResult, max_points: int = CHART_POINTS) -> dict[str, Any]:
+    """A query result trimmed to a size the LLM can read.
 
-    def __init__(self, person_id: str) -> None:
-        super().__init__(person_id)
-        self.person_id = person_id
-
-
-def parse_window(window: str) -> datetime | None:
-    """`latest` -> None (the repository picks the newest); else an ISO window end.
-
-    Raises ValueError on anything else, which `safe_tool` reports as bad_argument.
+    Each series keeps at most `max_points` evenly spaced points, and the whole
+    chart at most LLM_POINT_BUDGET.
     """
-    if window.strip().lower() in ("", "latest"):
+    per_series = max(2, min(max_points, LLM_POINT_BUDGET // max(1, len(result.series))))
+    trimmed = result.model_copy(
+        update={
+            "series": [
+                s.model_copy(update={"points": downsample(s.points, per_series)})
+                for s in result.series
+            ]
+        }
+    )
+    payload = dump(trimmed)
+    payload["downsampled"] = any(len(s.points) > per_series for s in result.series)
+    return payload
+
+
+def require_points(result: QueryResult) -> QueryResult:
+    """Raise when a query found nothing, so the agent hears why and can retry."""
+    if not any(s.points for s in result.series):
+        raise QueryError(
+            "No data in that range.",
+            data_available_until=result.as_of.isoformat() if result.as_of else None,
+            hint="Use `hours` to look back from now instead of explicit dates.",
+        )
+    return result
+
+
+def parse_time(value: str | None) -> datetime | None:
+    """None or "" -> None; otherwise an ISO-8601 time (UTC if no zone given)."""
+    if value is None or not value.strip():
         return None
-    parsed = datetime.fromisoformat(window)
+    parsed = datetime.fromisoformat(value.strip())
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 
-def require_assessment(
-    assessor: Assessor, person_id: str, window: str = "latest"
-) -> Assessment:
-    """The assessed window; raises PersonNotFoundError if person or window is absent."""
-    assessment = assessor.assess(person_id, parse_window(window))
-    if assessment is None:
-        raise PersonNotFoundError(person_id)
-    return assessment
-
-
-def window_of(score: RiskScore) -> dict[str, str]:
-    return {
-        "start": score.window_start.isoformat(),
-        "end": score.window_end.isoformat(),
-    }
-
-
 def result(
-    *,
-    summary: str,
-    rows: int,
-    model_version: str | None = None,
-    window: dict[str, str] | None = None,
-    **data: Any,
+    *, summary: str, rows: int, as_of: datetime | None, **data: Any
 ) -> dict[str, Any]:
     return {
         "summary": summary,
         "rows": rows,
-        "model_version": model_version,
-        "window": window,
+        "as_of": as_of.isoformat() if as_of else None,
         **data,
     }
 
 
 def error(code: str, message: str, **extra: Any) -> dict[str, Any]:
     return {"error": message, "code": code, "rows": 0, "summary": message, **extra}
-
-
-def not_found(person_id: str) -> dict[str, Any]:
-    return error("not_found", f"No person with id {person_id!r} exists in this data.")
-
-
-def cap_rows(rows: list[Any]) -> tuple[list[Any], dict[str, Any]]:
-    """Truncate to MAX_ROWS; the second value is merged into the payload."""
-    if len(rows) <= MAX_ROWS:
-        return rows, {"truncated": False}
-    return rows[:MAX_ROWS], {
-        "truncated": True,
-        "total_rows": len(rows),
-        "row_limit": MAX_ROWS,
-    }
-
-
-def verdict_fields(assessment: Assessment) -> dict[str, Any]:
-    """The trust fields every person-level payload carries."""
-    return {
-        "data_quality": assessment.quality.verdict,
-        "reliable": assessment.reliable,
-        "abstain_reason": assessment.abstain_reason,
-    }
-
-
-def model_output(assessment: Assessment) -> dict[str, Any]:
-    """The model's score, label and confidence, or nulls when not reliable."""
-    if not assessment.reliable:
-        return {"score": None, "label": None, "confidence": None, "suppressed": True}
-    score = assessment.score
-    return {
-        "score": score.score,
-        "label": score.label,
-        "confidence": score.confidence,
-        "suppressed": False,
-    }
 
 
 def safe_tool[F: Callable[..., dict[str, Any]]](fn: F) -> F:
@@ -155,7 +104,21 @@ def safe_tool[F: Callable[..., dict[str, Any]]](fn: F) -> F:
         try:
             return fn(*args, **kwargs)
         except PersonNotFoundError as exc:
-            return not_found(exc.person_id)
+            return error(
+                "not_found",
+                f"No participant matches {exc.ref!r}.",
+                suggestions=exc.suggestions,
+            )
+        except AmbiguousPersonError as exc:
+            return error(
+                "ambiguous",
+                f"{exc.ref!r} matches several participants; ask which one.",
+                candidates=exc.candidates,
+            )
+        except ForbiddenError as exc:
+            return error("not_permitted", str(exc))
+        except QueryError as exc:
+            return error("bad_argument", str(exc), **exc.details)
         except ValueError as exc:
             return error("bad_argument", str(exc))
         except Exception as exc:
@@ -167,3 +130,28 @@ def safe_tool[F: Callable[..., dict[str, Any]]](fn: F) -> F:
             )
 
     return wrapper  # type: ignore[return-value]
+
+
+def week_summary(result: QueryResult, metric: str) -> dict[str, Any] | None:
+    """First, newest, min, max and mean of one metric over a single-series result."""
+    if not result.series:
+        return None
+    points = [p for p in result.series[0].points if p.get(metric) is not None]
+    if not points:
+        return None
+    values = [p[metric] for p in points]
+    low = min(points, key=lambda p: p[metric])
+    high = max(points, key=lambda p: p[metric])
+    return {
+        "metric": metric,
+        "from": points[0]["t"].isoformat(),
+        "to": points[-1]["t"].isoformat(),
+        "first": values[0],
+        "newest": values[-1],
+        "min": low[metric],
+        "min_at": low["t"].isoformat(),
+        "max": high[metric],
+        "max_at": high["t"].isoformat(),
+        "mean": round(sum(values) / len(values), 4),
+        "points": len(values),
+    }

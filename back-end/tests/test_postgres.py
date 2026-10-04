@@ -1,27 +1,30 @@
 """Adapter logic against a recording stub. Not a live-database test."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from decimal import Decimal
 
-from agent.data.cache import StatsCache
-from agent.data.postgres import PostgresBackend
-from agent.domain.models import WindowKey
-from agent.domain.ports import FEATURE_WINDOW_TOLERANCE
+from agent.data.postgres import PostgresSource, to_window
+from agent.domain.metrics import GLUCO_CHANGE, GLUCO_SCORE
 
-END = datetime(2026, 10, 2, tzinfo=UTC)
-KEY = WindowKey(person_id="P1", window_end=END)
+END = datetime(2026, 10, 4, 7, tzinfo=UTC)
+PUBLISHED = datetime(2026, 10, 4, 8, tzinfo=UTC)
+PAYLOAD = {
+    "source_dataset": "big_ideas",
+    "window_minutes": 1440,
+    "wearable_risk_indicator": 91.5,
+    "risk_change_24h_points": Decimal("87.7"),
+    "hr_mean_bpm_24h": 142.9,
+    "motion_mean_g": 0.016,
+    "temperature_mean_c_24h": "24.2",
+    "motion_hr_correlation": None,
+    "synthetic_fraction": 0.4,  # provenance: never read
+    "demo_only": True,
+}
 
 
-class Clock:
-    now = 0.0
-
-    def __call__(self) -> float:
-        return Clock.now
-
-
-class Recorder(PostgresBackend):
-    def __init__(self, rows):
-        super().__init__("postgresql://unused")
+class Recorder(PostgresSource):
+    def __init__(self, rows, session_id: str | None = "s1"):
+        super().__init__("postgresql://unused", session_id)
         self.rows = rows
         self.queries: list[tuple[str, tuple]] = []
 
@@ -30,117 +33,61 @@ class Recorder(PostgresBackend):
         return self.rows
 
 
-RISK_ROW = {
-    "person_id": "P1",
-    "window_start": END,
-    "window_end": END,
-    "score": Decimal("0.8"),
-    "label": "at_risk",
-    "confidence": 0.9,
-    "wear_time_hours": 20,
-    "missing_signal_pct": 4,
-    "model_version": "v1",
-}
+def test_to_window_inverts_risk_into_gluco_and_keeps_nulls():
+    window = to_window("demo:big_ideas:013", END, PAYLOAD)
+    assert window.values[GLUCO_SCORE] == 100 - 91.5
+    assert window.values[GLUCO_CHANGE] == -87.7
+    assert window.values["temperature_mean_c_24h"] == 24.2
+    assert window.values["motion_hr_correlation"] is None
+    assert window.values["motion_std_g"] is None  # absent, not zero
+    assert "synthetic_fraction" not in window.values
+    assert (END - window.window_start).total_seconds() == 24 * 3600
+    assert window.source_dataset == "big_ideas"
 
 
-def test_get_score_composes_read_only_select_with_bound_params():
-    backend = Recorder([RISK_ROW])
-    score = backend.get_score("P1", END)
-    query, params = backend.queries[0]
-    assert query.startswith('SELECT "person_id" AS "person_id"')
-    assert 'FROM "risk_scores" WHERE "person_id" = %s AND "window_end" = %s' in query
-    assert query.endswith('ORDER BY "window_end" DESC LIMIT 1')
-    assert params == ("P1", END)
-    assert score is not None
-    assert score.score == 0.8
+def test_to_window_with_no_prediction():
+    window = to_window("p", END, {"wearable_risk_indicator": True})
+    assert window.values[GLUCO_SCORE] is None
+    assert window.source_dataset == "unknown"
 
 
-def test_get_score_missing_person_is_none():
-    assert Recorder([]).get_score("P999") is None
-
-
-def test_features_drop_metadata_and_non_numeric_columns():
+def test_fetch_since_is_a_schema_qualified_session_scoped_select():
     row = {
-        "person_id": "P1",
-        "window_start": END,
+        "person_id": "demo:big_ideas:013",
         "window_end": END,
-        "resting_hr_bpm": Decimal("71.5"),
-        "steps": 9000,
-        "hrv": None,
-        "feature_contributions": {"a": 1},
+        "payload": PAYLOAD,
+        "published_at": PUBLISHED,
     }
-    vector = Recorder([row]).get_features(KEY)
-    assert vector is not None
-    assert vector.values == {"resting_hr_bpm": 71.5, "steps": 9000.0, "hrv": None}
+    source = Recorder([row])
+    [published] = source.fetch_since(None)
+    query, params = source.queries[0]
+    assert query.startswith('SELECT "participant_key" AS person_id')
+    assert '"gold"."dashboard_windows"' in query
+    assert '"session_id" = %s' in query
+    assert 'published_at" >=' not in query
+    assert params == ("s1",)
+    assert published.published_at == PUBLISHED
+
+    source.fetch_since(PUBLISHED)
+    query, params = source.queries[-1]
+    assert '"published_at" >= %s' in query
+    assert params == ("s1", PUBLISHED)
 
 
-def test_features_reject_booleans_and_keep_numbers():
-    row = {
-        "person_id": "P1",
-        "window_start": END,
-        "window_end": END,
-        "is_weekend": True,
-        "steps": 9000,
-    }
-    vector = Recorder([row]).get_features(KEY)
-    assert vector is not None
-    assert vector.values == {"steps": 9000.0}
+def test_session_defaults_to_the_most_recently_published():
+    source = Recorder([{"session": "latest-run"}], session_id=None)
+    assert source.session_id() == "latest-run"
+    query, _ = source.queries[0]
+    assert 'ORDER BY "published_at" DESC LIMIT 1' in query
+    source.session_id()
+    assert len(source.queries) == 1  # cached
 
 
-def test_features_match_the_window_within_a_tolerance_closest_first():
-    backend = Recorder([])
-    backend.get_features(KEY)
-    query, params = backend.queries[0]
-    assert 'FROM "person_features" WHERE "person_id" = %s' in query
-    assert 'AND "window_end" BETWEEN %s AND %s' in query
-    assert "ORDER BY abs(extract(epoch FROM" in query
-    assert params == (
-        "P1",
-        END - FEATURE_WINDOW_TOLERANCE,
-        END + FEATURE_WINDOW_TOLERANCE,
-        END,
-    )
+def test_no_session_means_no_rows():
+    assert Recorder([], session_id=None).fetch_since(None) == []
 
 
-def test_history_is_newest_first_and_limited():
-    backend = Recorder([RISK_ROW])
-    assert len(backend.get_history("P1", 3)) == 1
-    query, params = backend.queries[0]
-    assert query.endswith('ORDER BY "window_end" DESC LIMIT %s')
-    assert params == ("P1", 3)
-
-
-def test_writable_tables_are_reported_and_only_selects_are_issued():
-    backend = Recorder([{"name": "risk_scores"}])
-    assert backend.writable_tables() == ["risk_scores"]
-    backend.check_read_only()  # warns, never raises
-    assert all(q.lstrip().upper().startswith("SELECT") for q, _ in backend.queries)
-
-
-def test_stats_are_reloaded_after_the_ttl():
-    rows = [{"feature_name": "a", "mean": 1, "stddev": 2, "p50": 1}]
-    backend = Recorder(rows)
-    backend._stats = StatsCache(backend._load_stats, 60.0, clock=Clock())
-    backend.feature_stats("all")
-    backend.feature_stats("all")
-    assert len(backend.queries) == 1
-    Clock.now += timedelta(seconds=61).total_seconds()
-    backend.feature_stats("all")
-    assert len(backend.queries) == 2
-
-
-def test_stats_come_from_cohort_stats_view_and_are_cached():
-    rows = [{"feature_name": "a", "mean": 1, "stddev": 2, "p50": 1}]
-    backend = Recorder(rows)
-    assert backend.feature_stats("all")["a"].stddev == 2
-    backend.feature_stats("all")
-    assert len(backend.queries) == 1
-    assert 'FROM "cohort_stats"' in backend.queries[0][0]
-
-
-def test_only_selects_are_ever_issued():
-    backend = Recorder([RISK_ROW])
-    backend.get_score("P1")
-    backend.latest_scores()
-    backend.model_version()
-    assert all(q.lstrip().upper().startswith("SELECT") for q, _ in backend.queries)
+def test_write_check_names_the_table():
+    source = Recorder([{"writable": False}])
+    assert source.can_write() is False
+    assert source.queries[0][1] == ("gold.dashboard_windows",) * 3

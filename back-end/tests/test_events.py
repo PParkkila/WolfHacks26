@@ -17,6 +17,9 @@ class Recording(EventHandler):
     def on_tool_end(self, data):
         self.seen.append(("tool_end", data))
 
+    def on_data(self, data):
+        self.seen.append(("data", data))
+
     def on_error(self, data):
         self.seen.append(("error", data))
 
@@ -26,7 +29,7 @@ class Recording(EventHandler):
 
 def test_each_event_kind_reaches_its_hook_with_its_data():
     handler = Recording()
-    kinds = ["token", "tool_start", "tool_end", "error", "done"]
+    kinds = ["token", "tool_start", "tool_end", "data", "error", "done"]
     for kind in kinds:
         handler.handle(SseEvent(kind, {"k": kind}))  # type: ignore[arg-type]
     assert handler.seen == [(kind, {"k": kind}) for kind in kinds]
@@ -40,10 +43,12 @@ def test_cli_printer_splits_answer_and_diagnostics(capsys):
     printer = _Printer()
     printer.handle(SseEvent("tool_start", {"tool": "t", "args": {"a": 1}}))
     printer.handle(SseEvent("tool_end", {"summary": "s"}))
+    printer.handle(SseEvent("data", {"chart": {"series": [1, 2]}}))
     printer.handle(SseEvent("token", {"text": "answer"}))
     printer.handle(SseEvent("error", {"message": "boom"}))
     out, err = capsys.readouterr()
     assert out == "answer"
     assert "[t {'a': 1}]" in err
     assert "[-> s]" in err
+    assert "[chart: 2 series]" in err
     assert "[error] boom" in err

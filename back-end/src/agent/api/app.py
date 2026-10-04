@@ -1,72 +1,47 @@
-"""FastAPI wiring for Contract B: POST /chat (SSE), GET /health, GET /tools."""
+"""FastAPI wiring: auth, dashboard, chat (SSE) and health."""
 
 import logging
-from typing import Annotated
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, StringConstraints
-from sse_starlette.sse import EventSourceResponse
 
-from agent.api.sse import sse_frame
+from agent.api import chat, dashboard, login
+from agent.api.deps import install_error_handlers
+from agent.api.schemas import Health
 from agent.bootstrap import Runtime, build_runtime
 
 log = logging.getLogger(__name__)
 
-SessionId = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_-]{1,128}$")]
-Message = Annotated[str, StringConstraints(min_length=1, max_length=4000)]
-
-# Stop proxies (nginx etc.) from buffering the stream, which looks like a freeze.
-SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
-
-
-class ChatRequest(BaseModel):
-    session_id: SessionId
-    message: Message
-
 
 def create_app(runtime: Runtime) -> FastAPI:
-    app = FastAPI(title="PulseCast agent")
+    app = FastAPI(title="PulseCast API")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=runtime.settings.allowed_origins,
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.state.runtime = runtime
+    install_error_handlers(app)
+    for module in (login, dashboard, chat):
+        app.include_router(module.router)
 
-    @app.post("/chat")
-    async def chat(request: ChatRequest) -> EventSourceResponse:
-        async def events():
-            async for event in runtime.chat.stream(request.session_id, request.message):
-                yield sse_frame(event)
-
-        return EventSourceResponse(events(), headers=SSE_HEADERS)
-
-    @app.get("/health")
-    def health() -> dict[str, object]:
-        db = runtime.repos.health.ping()
-        model_version = None
-        if db:
-            try:
-                model_version = runtime.repos.health.model_version()
-            except Exception:
-                log.exception("model_version lookup failed")
-        return {
-            "db": db,
-            "llm": runtime.llm.is_ready(),
-            "model_version": model_version,
-        }
-
-    @app.get("/tools")
-    def tools() -> list[dict[str, object]]:
-        return [
-            {
-                "name": tool.name,
-                "description": tool.description,
-                "parameters": tool.params_json_schema,
-            }
-            for tool in runtime.tools
-        ]
+    @app.get("/health", tags=["health"])
+    def health() -> Health:
+        db = runtime.source.ping()
+        try:
+            windows, people = runtime.store.size(), len(runtime.store.participants())
+            clock = runtime.clock.state()
+        except Exception:
+            log.exception("store unavailable")
+            windows, people, clock = 0, 0, None
+        return Health(
+            db=db,
+            llm=runtime.llm.is_ready(),
+            windows=windows,
+            participants=people,
+            clock=clock,
+        )
 
     return app
 

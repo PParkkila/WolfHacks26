@@ -13,7 +13,8 @@ from agents import (
 
 from agent.api.chat_service import MAX_TURNS_REPLY, ChatService
 from agent.api.sse import StreamTranslator
-from agent.guardrails import DECLINE_MESSAGES, GuardrailVerdict, build_input_guardrails
+from agent.auth import CLINICIAN, patient
+from agent.guardrails import POLICIES, GuardrailVerdict, build_input_guardrails
 from agent.observability.trace import JsonlTracer, NullTracer
 
 
@@ -36,18 +37,20 @@ def returned(output, call_id: str = "c1") -> RunItemStreamEvent:
 def test_translator_maps_the_five_event_kinds():
     t = StreamTranslator()
     assert t.translate(delta("hi"))[0].data == {"text": "hi"}
-    start = t.translate(called("get_risk_label", {"person_id": "P012"}))[0]
+    start = t.translate(called("get_participant", {"person_id": "P012"}))[0]
     assert (start.name, start.data) == (
         "tool_start",
-        {"call_id": "c1", "tool": "get_risk_label", "args": {"person_id": "P012"}},
+        {"call_id": "c1", "tool": "get_participant", "args": {"person_id": "P012"}},
     )
-    end = t.translate(returned({"summary": "P012: at_risk", "rows": 1}))[0]
+    end = t.translate(returned({"summary": "Patient 012: Gluco Score 40", "rows": 1}))[
+        0
+    ]
     assert (end.name, end.data) == (
         "tool_end",
         {
             "call_id": "c1",
-            "tool": "get_risk_label",
-            "summary": "P012: at_risk",
+            "tool": "get_participant",
+            "summary": "Patient 012: Gluco Score 40",
             "rows": 1,
         },
     )
@@ -55,7 +58,7 @@ def test_translator_maps_the_five_event_kinds():
 
 def test_translator_handles_error_payloads_and_noise():
     t = StreamTranslator()
-    t.translate(called("explain_risk", {}))
+    t.translate(called("explain_change", {}))
     end = t.translate(returned({"error": "not found", "rows": 0}))[0]
     assert end.data["summary"] == "not found"
     assert end.data["rows"] == 0
@@ -75,18 +78,29 @@ class FakeResult:
             raise self._raises
 
 
-def service(result: FakeResult, tracer=None) -> ChatService:
+class FakeSessions:
+    def __init__(self) -> None:
+        self.touched: list[tuple[str, str, str]] = []
+
+    def touch(self, user_id: str, session_id: str, message: str) -> None:
+        self.touched.append((user_id, session_id, message))
+
+    def open(self, user_id: str, session_id: str) -> None:
+        return None
+
+
+def service(result: FakeResult, tracer=None, sessions=None) -> ChatService:
     return ChatService(
-        agent=None,  # type: ignore[arg-type]
-        sessions=lambda sid: None,  # type: ignore[arg-type,return-value]
+        agents=lambda principal: None,  # type: ignore[arg-type,return-value]
+        sessions=sessions or FakeSessions(),  # type: ignore[arg-type]
         tracer=tracer or NullTracer(),
         max_turns=6,
         run_streamed=lambda *a, **k: result,
     )
 
 
-async def collect(svc: ChatService):
-    return [e async for e in svc.stream("s1", "hello")]
+async def collect(svc: ChatService, principal=CLINICIAN):
+    return [e async for e in svc.stream(principal, "s1", "hello")]
 
 
 async def test_stream_happy_path_ends_with_done():
@@ -101,17 +115,35 @@ async def test_stream_happy_path_ends_with_done():
     assert events[-1].data == {"session_id": "s1"}
 
 
-async def test_guardrail_trip_is_a_normal_reply_not_an_error():
-    guardrail = build_input_guardrails("m")[0]
+def trip(category: str, role="clinician") -> InputGuardrailTripwireTriggered:
+    guardrail = build_input_guardrails("m", role)[0]
     out = GuardrailFunctionOutput(
-        output_info=GuardrailVerdict(category="treatment"), tripwire_triggered=True
+        output_info=GuardrailVerdict(category=category),  # type: ignore[arg-type]
+        tripwire_triggered=True,
     )
-    trip = InputGuardrailTripwireTriggered(
+    return InputGuardrailTripwireTriggered(
         InputGuardrailResult(guardrail=guardrail, output=out)
     )
-    events = await collect(service(FakeResult(raises=trip)))
+
+
+async def test_guardrail_trip_is_a_normal_reply_not_an_error():
+    events = await collect(service(FakeResult(raises=trip("treatment"))))
     assert [e.name for e in events] == ["token", "done"]
-    assert events[0].data["text"] == DECLINE_MESSAGES["treatment"]
+    assert events[0].data["text"] == POLICIES["clinician"].declines["treatment"]
+
+
+async def test_patient_decline_uses_the_patient_wording():
+    me = patient("demo:big_ideas:013")
+    events = await collect(
+        service(FakeResult(raises=trip("other_people", "patient"))), me
+    )
+    assert events[0].data["text"] == POLICIES["patient"].declines["other_people"]
+
+
+async def test_turns_are_recorded_under_the_signed_in_user():
+    sessions = FakeSessions()
+    await collect(service(FakeResult([delta("ok")]), sessions=sessions))
+    assert sessions.touched == [("clinician:demo", "s1", "hello")]
 
 
 async def test_max_turns_gives_plain_apology():
@@ -136,7 +168,7 @@ async def test_jsonl_trace_records_the_turn(tmp_path):
     path = tmp_path / "t.jsonl"
     fake = FakeResult(
         [
-            called("get_risk_label", {"person_id": "P1"}),
+            called("get_participant", {"person_id": "P1"}),
             returned({"summary": "s", "rows": 1}),
             delta("answer"),
         ]
@@ -146,14 +178,31 @@ async def test_jsonl_trace_records_the_turn(tmp_path):
     assert line["message"] == "hello"
     assert line["answer"] == "answer"
     assert line["outcome"] == "ok"
-    assert line["tool_calls"][0]["tool"] == "get_risk_label"
+    assert line["tool_calls"][0]["tool"] == "get_participant"
     assert line["tool_calls"][0]["rows"] == 1
     assert isinstance(line["latency_ms"], int)
 
 
-@pytest.mark.parametrize("category", ["diagnosis", "treatment", "identification"])
-def test_every_blocking_category_has_a_decline(category):
-    assert DECLINE_MESSAGES[category]
+@pytest.mark.parametrize("role", ["clinician", "patient"])
+def test_every_role_blocks_diagnosis_and_has_a_fallback(role):
+    policy = POLICIES[role]
+    assert policy.declines["diagnosis"]
+    assert policy.fallback in policy.declines
+
+
+def test_patients_may_ask_for_wellness_ideas_but_not_about_others():
+    assert "other_people" in POLICIES["patient"].declines
+    assert "none" not in POLICIES["patient"].declines
+    assert "general everyday wellness" in POLICIES["patient"].instructions
+
+
+def test_tool_output_with_a_chart_also_emits_a_data_event():
+    t = StreamTranslator()
+    t.translate(called("get_my_trend", {}, call_id="c9"))
+    chart = {"series": [{"participant_id": "p", "points": [{"t": "x", "v": 1}]}]}
+    events = t.translate(returned({"summary": "s", "rows": 1, "chart": chart}, "c9"))
+    assert [e.name for e in events] == ["tool_end", "data"]
+    assert events[1].data == {"call_id": "c9", "tool": "get_my_trend", "chart": chart}
 
 
 def test_translator_accepts_genuine_sdk_items():
@@ -164,7 +213,7 @@ def test_translator_accepts_genuine_sdk_items():
     sdk_agent = Agent(name="x")
     call = ResponseFunctionToolCall(
         type="function_call",
-        name="get_risk_label",
+        name="get_participant",
         call_id="call_1",
         arguments='{"person_id": "P012"}',
     )
@@ -191,13 +240,13 @@ def test_translator_accepts_genuine_sdk_items():
     )[0]
     assert start.data == {
         "call_id": "call_1",
-        "tool": "get_risk_label",
+        "tool": "get_participant",
         "args": {"person_id": "P012"},
     }
     end = t.translate(RunItemStreamEvent(name="tool_output", item=output))[0]
     assert end.data == {
         "call_id": "call_1",
-        "tool": "get_risk_label",
+        "tool": "get_participant",
         "summary": "s",
         "rows": 3,
     }
@@ -218,7 +267,9 @@ def test_missing_call_id_is_generated_and_paired_oldest_first():
     start = t.translate(
         RunItemStreamEvent(
             name="tool_called",
-            item=SimpleNamespace(raw_item={"name": "explain_risk", "arguments": "{}"}),
+            item=SimpleNamespace(
+                raw_item={"name": "explain_change", "arguments": "{}"}
+            ),
         )
     )[0]
     assert start.data["call_id"] == "call-1"
@@ -228,7 +279,7 @@ def test_missing_call_id_is_generated_and_paired_oldest_first():
             item=SimpleNamespace(raw_item={}, output={"summary": "s", "rows": 1}),
         )
     )[0]
-    assert (end.data["call_id"], end.data["tool"]) == ("call-1", "explain_risk")
+    assert (end.data["call_id"], end.data["tool"]) == ("call-1", "explain_change")
 
 
 async def test_trace_keeps_parallel_same_tool_calls_apart(tmp_path):

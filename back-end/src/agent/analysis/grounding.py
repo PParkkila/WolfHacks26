@@ -10,6 +10,8 @@ from collections.abc import Iterable
 from typing import Any
 
 NUMBER = re.compile(r"(?<![\w.])\d+(?:,\d{3})*(?:\.\d+)?")
+# Inside source strings every digit run counts, so "07" in "...T07:00..." is a fact.
+SOURCE_NUMBER = re.compile(r"\d+(?:\.\d+)?")
 # "1." / "2)" / "- 3." at the start of a line numbers a list; it says nothing.
 LIST_MARKER = re.compile(r"(?m)^\s*(?:[-*]\s*)?\d+[.)]\s+")
 
@@ -25,17 +27,17 @@ def _decimals(number: str) -> int:
 def _facts(source: Any) -> Iterable[float]:
     """Every value a source can vouch for.
 
-    Numbers count as themselves and, for probabilities, as a percentage. Numbers
-    inside strings (timestamps, summaries) count the same way. So does the length
-    of a list, because "5 features" is a fair reading of a five-item list.
+    Numbers count as themselves, as their magnitude ("dropped by 87.7" reads a
+    change of -87.7) and, for probabilities, as a percentage. Numbers inside
+    strings (timestamps, summaries) count the same way. So does the length of a
+    list, because "5 features" is a fair reading of a five-item list.
     """
     if isinstance(source, bool) or source is None:
         return
     if isinstance(source, int | float):
-        yield float(source)
-        yield float(source) * 100
+        yield from (float(source), abs(float(source)), float(source) * 100)
     elif isinstance(source, str):
-        for n in _numbers_in(source):
+        for n in SOURCE_NUMBER.findall(source):
             yield from (float(n), float(n) * 100)
     elif isinstance(source, dict):
         for value in source.values():

@@ -29,6 +29,7 @@ OUTPUT = {
         "It sits near the 94.3th percentile.",
         "The top 2 features are listed.",  # a list length
         "1. First finding\n2. Second finding",  # list markers say nothing
+        "As of 2026-10-02 00:00 UTC.",  # digits inside an ISO timestamp
     ],
 )
 def test_supported_numbers_pass(answer):
@@ -46,6 +47,11 @@ def test_supported_numbers_pass(answer):
 )
 def test_unsupported_numbers_are_reported_once_in_order(answer, expected):
     assert ungrounded_numbers(answer, OUTPUT) == expected
+
+
+def test_a_change_may_be_stated_as_its_size():
+    change = {"gluco_change_24h": -87.7191}
+    assert ungrounded_numbers("It dropped by 87.7 points.", change) == []
 
 
 def test_the_users_own_numbers_count():

@@ -1,25 +1,24 @@
-"""Derive cohort distributions from raw feature vectors."""
+"""Derive distributions from metric values."""
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 
 import numpy as np
 
-from agent.domain.models import FeatureStat, FeatureVector
+from agent.domain.models import FeatureStat
 
 MIN_SAMPLES = 2
 
 
 def compute_feature_stats(
-    vectors: Iterable[FeatureVector],
+    rows: Iterable[Mapping[str, float | None]],
 ) -> dict[str, FeatureStat]:
-    """Per-feature mean, sample stddev and median; nulls are ignored.
+    """Per-metric mean, sample stddev and median; nulls are ignored.
 
-    Used by the mock backend, and by the Postgres adapter when the data team does
-    not provide `cohort_stats` or for the at-risk subgroup.
+    A metric with fewer than MIN_SAMPLES values gets no entry.
     """
     columns: dict[str, list[float]] = {}
-    for vector in vectors:
-        for name, value in vector.values.items():
+    for row in rows:
+        for name, value in row.items():
             if value is not None:
                 columns.setdefault(name, []).append(value)
 

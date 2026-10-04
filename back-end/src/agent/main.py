@@ -23,16 +23,30 @@ class _Printer(EventHandler):
     def on_tool_end(self, data: dict[str, Any]) -> None:
         print(f"  [-> {data['summary']}]", file=sys.stderr)
 
+    def on_data(self, data: dict[str, Any]) -> None:
+        series = data["chart"].get("series", [])
+        print(f"  [chart: {len(series)} series]", file=sys.stderr)
+
     def on_error(self, data: dict[str, Any]) -> None:
         print(f"\n[error] {data['message']}", file=sys.stderr)
 
 
-async def _ask(question: str, session_id: str) -> None:
+async def _ask(question: str, session_id: str, who: str) -> None:
+    from agent.analysis.ids import resolve_participant
+    from agent.auth import CLINICIAN, patient
     from agent.bootstrap import build_runtime
+    from agent.config import Settings
 
-    runtime = build_runtime()
+    # A one-off question has no shared replay clock: answer as of the newest data.
+    runtime = build_runtime(Settings(replay_enabled=False))  # pyright: ignore[reportCallIssue]
+    principal = (
+        CLINICIAN
+        if who == "clinician"
+        else patient(resolve_participant(who, runtime.store.participants()))
+    )
+    print(f"[as {principal.display_name}, now {runtime.clock.now()}]", file=sys.stderr)
     printer = _Printer()
-    async for event in runtime.chat.stream(session_id, question):
+    async for event in runtime.chat.stream(principal, session_id, question):
         printer.handle(event)
     print()
 
@@ -49,6 +63,12 @@ def main(argv: list[str] | None = None) -> None:
     ask = commands.add_parser("ask", help="ask one question without a server")
     ask.add_argument("question")
     ask.add_argument("--session", default=None, help="session id (default: new)")
+    ask.add_argument(
+        "--as",
+        dest="who",
+        default="clinician",
+        help='"clinician" (default) or a participant, e.g. "13" for Patient 013',
+    )
 
     args = parser.parse_args(argv)
     if args.command == "serve":
@@ -60,7 +80,7 @@ def main(argv: list[str] | None = None) -> None:
             reload=args.reload,
         )
     else:
-        asyncio.run(_ask(args.question, args.session or uuid.uuid4().hex))
+        asyncio.run(_ask(args.question, args.session or uuid.uuid4().hex, args.who))
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-EventName = Literal["token", "tool_start", "tool_end", "done", "error"]
+EventName = Literal["token", "tool_start", "tool_end", "data", "done", "error"]
 
 
 @dataclass(frozen=True)
@@ -27,6 +27,8 @@ class EventHandler:
                 self.on_tool_start(event.data)
             case "tool_end":
                 self.on_tool_end(event.data)
+            case "data":
+                self.on_data(event.data)
             case "error":
                 self.on_error(event.data)
             case "done":
@@ -39,6 +41,9 @@ class EventHandler:
         pass
 
     def on_tool_end(self, data: dict[str, Any]) -> None:
+        pass
+
+    def on_data(self, data: dict[str, Any]) -> None:
         pass
 
     def on_error(self, data: dict[str, Any]) -> None:
